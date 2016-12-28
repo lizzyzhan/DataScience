@@ -34,7 +34,7 @@ fig_code.plot_example_decision_tree()
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_6_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_6_0.png)
 
 
 The binary splitting makes this extremely efficient.
@@ -55,7 +55,7 @@ plt.scatter(X[:, 0], X[:, 1], c=y, s=50, cmap='rainbow');
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_8_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_8_0.png)
 
 
 We have some convenience functions in the repository that help 
@@ -73,7 +73,7 @@ plot_tree_interactive(X, y);
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_12_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_12_0.png)
 
 
 Notice that at each increase in depth, every node is split in two **except** those nodes which contain only a single class.
@@ -101,7 +101,7 @@ visualize_tree(clf, X[-200:], y[-200:], boundaries=False)
 
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_15_1.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_15_1.png)
 
 
 
@@ -109,7 +109,7 @@ visualize_tree(clf, X[-200:], y[-200:], boundaries=False)
 
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_15_3.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_15_3.png)
 
 
 The details of the classifications are completely different! That is an indication of **over-fitting**: when you predict the value for a new point, the result is more reflective of the noise in the model rather than the signal.
@@ -141,7 +141,7 @@ interact(fit_randomized_tree, random_state=[0, 100]);
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_18_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_18_0.png)
 
 
 See how the details of the model change as a function of the sample, while the larger characteristics remain the same!
@@ -155,7 +155,7 @@ visualize_tree(clf, X, y, boundaries=False);
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_20_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_20_0.png)
 
 
 By averaging over 100 randomly perturbed models, we end up with an overall model which is a much better fit to our data!
@@ -187,7 +187,7 @@ plt.errorbar(x, y, 0.3, fmt='o');
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_23_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_23_0.png)
 
 
 
@@ -202,7 +202,7 @@ plt.plot(xfit, ytrue, '-k', alpha=0.5);
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_24_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_24_0.png)
 
 
 As you can see, the non-parametric random forest model is flexible enough to fit the multi-period data, without us even specifying a multi-period model!
@@ -255,7 +255,7 @@ for i in range(64):
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_30_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_30_0.png)
 
 
 We can quickly classify the digits using a decision tree as follows:
@@ -298,7 +298,7 @@ plt.ylabel("true label");
 ```
 
 
-![png](https://github.com/gasongjian/DataScience/images/rf_36_0.png)
+![png](https://github.com/gasongjian/DataScience/tree/master/images/rf_36_0.png)
 
 
 ### Exercise
