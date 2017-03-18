@@ -22,7 +22,10 @@ global config
 
 config={
 'de':{
-'price_name':'preis'}}
+'price_name':'preis',
+'unit':'EUR',
+'unit_symbol':'€',
+'price_sep':'.'}}
 
 
 
@@ -89,45 +92,68 @@ def get_phone_pid_de():
 def get_info(pid,country='de'):
     #pid='B01D0I0N3C'
     #country='de'
+    info={'pid':pid,'country':country,\
+    'pname':None,\
+    'brand':None,\
+    'price':None}
     url='https://www.amazon.{country}/dp/{pid}/'.format(country=country,pid=pid)
     req = request.Request(url)
     req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 6.1; rv:2.0.1) Gecko/20100101 Firefox/4.0.1')
-    data=request.urlopen(req,timeout=200).read()
+    try:
+        data=request.urlopen(req,timeout=200).read()
+    except:
+        print('time out')
+        return info
     html=BeautifulSoup(data.decode('utf-8','ignore'),'lxml')
     
     # 产品名称
-    pname=html.title.text
-    pname=pname.split(':')[0]
+    try:
+        pname=html.title.text
+        pname=pname.split(':')[0]
+    except:
+        pname=None            
     # 手机价格
-    h=html.findAll('div',{'id':'price'})
-    h1=h[0].findAll('tr')
-    price=None
-    for hh in h1:
-        tmp=hh.findAll('td')
-        tmp1=tmp[0].text.lower()
-        tmp2=tmp[1].text
-        if config['de']['price_name']==tmp1[:-1]:
-            tmp2=re.findall('[\d.,]{2,}',tmp2)
-            if tmp2:
-                price=tmp2[0]
-    if price:
-        price=int(re.sub(',','',price))
+    try:
+        h=html.findAll('div',{'id':'price'})
+        h1=h[0].findAll('tr')
+        price=None
+        for hh in h1:
+            tmp=hh.findAll('td')
+            tmp1=tmp[0].text.lower()
+            tmp2=tmp[1].text
+            if config['de']['price_name']==tmp1[:-1]:
+                tmp2=re.findall('[\d.,]{2,}',tmp2)
+                if tmp2:
+                    price=tmp2[0]
+        if price:
+            if country in ['de']:
+                price=re.sub('\.','',price)
+                price=float(re.sub(',','.',price))
+            else:
+                price=float(re.sub(',','',price))
+    except:
+        price=None
     # 手机品牌
-    brand=None
-    tmp=html.findAll('a',{'id':'brand'})
-    if tmp:
-        tmp=tmp[0].text
-        brand=re.sub('\s','',tmp)
-    if not brand:
-        brand=pname.split(' ')[0]
-    info={'pid':pid,'pname':pname,'brand':brand,'price':price}
+    try:
+        brand=None
+        tmp=html.findAll('a',{'id':'brand'})
+        if tmp:
+            tmp=tmp[0].text
+            brand=re.sub('\s','',tmp)
+        if not brand:
+            brand=pname.split(' ')[0]
+    except:
+        brand=None
+    info['pname']=pname
+    info['brand']=brand
+    info['price']=price
     return info
         
 
 
 
 def get_reviews(pid,country='de'):
-    pid='B01D0I0N3C'
+    #pid='B01D0I0N3C'
     country='de'
     url0="https://www.amazon."+country+"/product-reviews/{product_id}/?pageNumber={pagenum}"
     reviews=[]
