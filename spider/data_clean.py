@@ -38,3 +38,24 @@ data=pd.read_csv('reviews_amazon_de.csv')
 s=TextBlob(data.iloc[1,-1])
 
 
+
+import pandas as pd
+import amazon
+
+
+
+
+pid_info=pd.read_csv('phone_pid_de_info.csv',index_col='pid')
+pid_info['pid']=list(pid_info.index)
+pid_list=list(pid_info[pid_info['country'].notnull()].index)
+
+
+i=0
+for pid in pid_list:
+    i+=1
+    info=amazon.get_info(pid)
+    pid_info.loc[pid,:]=pd.Series(info)
+    print('get %s (%d/%d)'%(pid,i,len(pid_list)))
+   
+pid_info.to_csv('phone_pid_de_info.csv',index=False)
+
