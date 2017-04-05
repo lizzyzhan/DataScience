@@ -74,11 +74,11 @@ def get_jd_all_pid(pid):
         pid_list=[pid]
         pid_ind=None
     if w:
-        w=w[0]
+        w=w[0].lower()
         v=eval(w)
         pid_ind=pd.DataFrame(v)
-        pid_list=list(pid_ind['SkuId'])
-        pid_list=[t['SkuId'] for t in v]
+        pid_list=list(pid_ind['skuid'])
+        pid_list=[t['skuid'] for t in v]
     return pid_list,product_name,pid_ind
 
 
@@ -241,10 +241,14 @@ def get_list(url):
 def get_jd_info(pid,filename=None):
     import pandas as pd
     print('begin spyder the comments info of :{pid}'.format(pid=pid))
-    pid_list,product_name,pid_ind=get_jd_all_pid(pid)
+    try:
+        pid_list,product_name,pid_ind=get_jd_all_pid(pid)
+    except:
+        pid_list=[pid]
+        product_name='%s'%pid
     print('have get the pid_list: '+','.join(['%s'%p for p in pid_list]))
     if not filename:
-        filename='{}_comments.csv'.format(product_name)
+        filename=product_name+'.csv'
     sample_len=0#样本总数
     d=pd.DataFrame()#存储清洗过后的数据
     for pid in pid_list:
@@ -271,19 +275,22 @@ def get_jd_info(pid,filename=None):
     rate=sample_len1*1.0/sample_len
 
     # 增加产品信息
-    if type(pid_ind)==pd.core.frame.DataFrame:
+    try:
         colnames=list(pid_ind.columns)
-        colnames.remove('SkuId')
+        colnames.remove('skuid')
         for colname in colnames:
             d[colname]=d['referenceId']
-            SkuId=['%s'%p for p in pid_ind['SkuId']]
+            SkuId=['%s'%p for p in pid_ind['skuid']]
             referenceId_ind=dict(zip(SkuId,pid_ind[colname]))
             d[colname].replace(referenceId_ind,inplace=True)
+    except:
+        pass
     # 修改错误的referenceName
     #referenceName=d['referenceId'].replace(pid_index)
     #d['referenceName']=referenceName
     d.to_csv(filename,index=False)
-    return (sample_len1,rate)
+    print(u'清洗后, 共获得有效评论 {} 条, 有效率为：{:.1}%'.format(sample_len1,rate*100))
+    #return (sample_len1,rate)
 
 
 def merge_info(pid_list,filapath='.\\files\\',filename=None):
@@ -333,100 +340,50 @@ def temp(mylist):
         print("the {item} has found {n}" .format(item=item,n=mylist.count(item)))
 
 
-# print(main('http://list.jd.com/list.html?cat=6144,6167,6173'))
-#while 1:
-#    print('\n' + '=' * 80 + '\n')
-#    try:
-#        command = input(
-#            '为了避免拿来主义，本程序功能仅限以下内容：\n1. 输入单个商品页地址或商品ID========>导出评论(pid.ini)\n2. 输入商品列表页地址（比如某类目，不是搜索结果页，事先最好按评论数排序）========>该类目下有评论的ID（类目标题.txt）\n3. 输入文件名（类目标题.txt）========>得到该类目下所有商品评论（类目.ini）\n4. 输入exit或quit退出程序\n注：所有非程序文件读写都在files目录下\n以上模式自动识别，请输入指令：\n')
-#        if command == 'exit' or command == 'quit':
-#            print('程序结束...')
-#            break
-#        if command.isalnum():
-#            print(command)
-#            with open('./files/%s.txt' % command, 'w', encoding='utf-8') as f:
-#                f.write(get_jd_rate_all(command))
-#                print('%s已完成，结果已存入%s.txt' % (command, command))
-#                continue
-#        if '.txt' in command:
-#            with open('./files/' + command) as ff:
-#                ids = ff.read().split()
-#            fname = command.replace('.txt', '.ini')
-#            print(ids)
-#            zongshu = len(ids)
-#            jishu = 0
-#            with open('./files/' + fname, 'w', encoding='utf-8') as f:
-#                for i in ids:
-#                    f.write(get_jd_rate_all(i) + '\n')
-#                    jishu += 1
-#                    print('%s已完成-%s/%s' % (i, jishu, zongshu))
-#                    print('所有结果已存入%s' % fname)
-#            continue
-#
-#        main(command)
-#    except Exception as e:
-#        print(e)
-#        print('错误..')
-
-#pid0=[2951490,2473905,2473558,10429992152,10429992153,2600210,2600254,2600258,\
-#3196118,3196106,2928957,3169108,3707736,3707756,2174898,2174884,3020827,3237234,\
-#3245084,2967927,3478880,3404251,3278880,3245078,2967929,3564140,3717578,\
-#3742080,3742076,3742098,3742084,3311989,3742100]
-#for i in [1,2,3,4,5,6]:
-#    for j in [1,3,5,7,9]:
-#        pid0.append(31338*100+i*10+j)
-#pid0=pid0+list(range(1856581,1856593))+[3726844,3296831,3726828,3296817]
-
-#pid0=[1856583]+list(range(1856585,1856593))+[3726844,3296831,3726828,3296817]
-
-
-#pid0=[]
-#for i in [1,2,3,4,5,6]:
-#    for j in [1,3,5,7,9]:
-#        pid0.append(31338*100+i*10+j)
-
-
 
 '''
 pid=2969549
 r=get_jd_info(pid)
-print(r)
 '''
 
-while 1:
-    print('\n' + '=' * 80 + '\n')
 
-    try:
-        command = input(
-            '本程序具备以下内容：\n\
-            1. 输入单个手机ID========>导出评论(_comments.csv)\n\
-            2. 输入exit或quit退出程序\n注：所有中间数据读写都在files目录下\n以上模式自动识别，请输入指令：\n')
-        if command == 'exit' or command == 'quit':
-            print('程序结束...')
-            break
-        if command.isalnum():
-            n,r=get_jd_info(command)
-            print(u'一共获取有效评论 %s 条，刷单率为%.2f, 结果已存入 _comments.csv'%(n,r))
-            continue
-        if '.txt' in command:
-            with open('./files/' + command) as ff:
-                ids = ff.read().split()
-            fname = command.replace('.txt', '.ini')
-            print(ids)
-            zongshu = len(ids)
-            jishu = 0
-            with open('./files/' + fname, 'w', encoding='utf-8') as f:
-                for i in ids:
-                    f.write(get_jd_rate_all(i) + '\n')
-                    jishu += 1
-                    print('%s已完成-%s/%s' % (i, jishu, zongshu))
-                    print('所有结果已存入%s' % fname)
-            continue
 
-        main(command)
-    except Exception as e:
-        print(e)
-        print('错误..')
+
+if __name__=='__main__':
+    while 1:
+        print('\n' + '=' * 80 + '\n')
+    
+        try:
+            command = input(
+                '本程序具备以下内容：\n\
+                1. 输入单个手机ID========>导出评论(产品名称.csv)\n\
+                2. 输入exit或quit退出程序\n注：所有中间数据读写都在files目录下\n以上模式自动识别，请输入指令：\n')
+            if command == 'exit' or command == 'quit':
+                print('程序结束...')
+                break
+            if command.isalnum():
+                get_jd_info(command)
+                continue
+            if '.txt' in command:
+                # 将需要爬取的产品ID存储在txt文件中
+                with open('./files/' + command) as ff:
+                    ids = ff.read().split()
+                fname = command.replace('.txt', '.ini')
+                print(ids)
+                zongshu = len(ids)
+                jishu = 0
+                with open('./files/' + fname, 'w', encoding='utf-8') as f:
+                    for i in ids:
+                        f.write(get_jd_rate_all(i) + '\n')
+                        jishu += 1
+                        print('%s已完成-%s/%s' % (i, jishu, zongshu))
+                        print('所有结果已存入%s' % fname)
+                continue
+    
+            main(command)
+        except Exception as e:
+            print(e)
+            print('错误..')
 
 
 
