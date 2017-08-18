@@ -1,66 +1,61 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Aug 17 16:10:28 2017
+Created on Fri Aug 18 09:44:07 2017
 
 @author: 10206913
 """
 
 import pandas as pd
-import numpy as np
-import re
-import matplotlib.pyplot as plt
 import report as rpt
 from imp import reload
 reload(rpt)
-
-
-
-qid='blade_v8'
-userid_begin=10000
-code=rpt.read_code('code.xlsx')
-data=pd.read_excel('data.xlsx')
-data,code=rpt.to_dummpy(data,code,qtype_new='单选题')
-N=len(data)
-data.index=[userid_begin+i+1 for i in range(N)]
-t=data.stack().reset_index()
-t.columns=['userid','qn_an','code']
-t['qnum']=t['qn_an'].map(lambda x:x.split('_')[0])
-t['itemnum']=t['qn_an'].map(lambda x:'_'.join(x.split('_')[1:]))
-t['qtype']=t['qnum'].map(lambda x: code[x]['qtype'])
-t['qname']=t['qnum'].map(lambda x: code[x]['content'])
-t['itemname']=t['qn_an'].map(lambda x: code[x.split('_')[0]]['code_r'][x] if \
- code[x.split('_')[0]]['qtype']=='矩阵单选题' else code[x.split('_')[0]]['code'][x])
-
-
+import os
 
 '''
-t['value']=''
-for index in t.index:
-    if t.loc[index,'qtype']=='矩阵单选题':
-        if t.loc[index,'code']==0:
-            t.loc[index,'value']='否'
-        else:
-            t.loc[index,'value']=code[t.loc[index,'qnum']]['code'][t.loc[index,'code']]
-    elif t.loc[index,'qtype']=='排序题':
-        t.loc[index,'value']='Top{}'.format(t.loc[index,'code'])
+dirlist=os.listdir()
+userid_begin=1000000
+qdata=pd.DataFrame()
+quesinfo=pd.DataFrame()
+NN=0
+for dirname in dirlist:
+    if not os.path.isdir(dirname):
+        continue
+    print(dirname)
+    if os.path.exists(os.path.join(dirname,'data.xlsx')) and os.path.exists(os.path.join(dirname,'code.xlsx')):
+        code=rpt.read_code(os.path.join(dirname,'code.xlsx'))
+        data=rpt.read_data(os.path.join(dirname,'data.xlsx'))
     else:
-        t.loc[index,'value']='是' if t.loc[index,'code']==1 else '否'
+        data,code=rpt.wenjuanxing(dirname)
+    NN+=len(data)
+    print('该数据{}份，累计{}份'.format(len(data),NN))
+    qdata0,quesinfo0=rpt.qdata_flatten(data,code,quesid=dirname,userid_begin=userid_begin)
+    qdata=pd.concat([qdata,qdata0],axis=0,ignore_index=True)
+    quesinfo=pd.concat([quesinfo,quesinfo0],axis=0,ignore_index=True)
+    userid_begin+=len(data)
 '''
 
- 
-t['value']=''
-t['tmp']=t['qnum']+t['code'].map(lambda x:'_%s'%int(x)) 
-tmp1=t.loc[t['code']>0,'tmp'].map(lambda x: code[x.split('_')[0]]['code'][int(x.split('_')[1])] if code[x.split('_')[0]]['qtype']=='矩阵单选题' else '')
+from pandasql import sqldf
+pysqldf = lambda q: sqldf(q, globals())
+quesinfo=pd.read_csv(u'quesinfo.csv')
+qdata=pd.read_csv(u'qdata.csv')
 
-t['value']=t.loc[t['code']>0,'tmp'].map(lambda x: 'Top{}'.format(x.split('_')[1]) if code[x.split('_')[0]]['qtype']=='排序题' else '')
-t.loc[t['code']==0,'value']='否' 
-t.loc[t['code']==1,'value']='是' 
-    
-t['qid']=qid     
-qdata=pd.DataFrame(t,columns=['userid','qid','qnum','qname','qtype','itemnum','itemname','code','value'])
-       
-      
+quesinfo=quesinfo.rename(columns={'percent(%)':'percent'})
 
 
+qdata['UID']=range(len(qdata))
+d=pysqldf('select distinct(quesid) from quesinfo')
 
+
+print(pysqldf("select quesid,qnum,itemname,percent from quesinfo where itemname=='男' and qnum like '%关注%'"))
+
+
+
+
+
+
+s="select a.qnum,a.itemnum,b.qnum,b.itemnum, count(a.code) from qdata as a,qdata as b where \
+a.userid ==b.userid and a.quesid =='A452_russia' and b.quesid=='A452_russia' and a.qnum=='Q2' \
+and b.qnum=='Q3' and a.code==1 and b.code==1 group by a.qnum,a.itemnum,b.qnum,b.itemnum"
+
+print(pysqldf(s))
 
