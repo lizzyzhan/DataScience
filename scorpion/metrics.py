@@ -5,11 +5,15 @@ import numpy as np
 from scipy import stats
 
 
+# 测试数据集
 np.random.seed(100000)
+# 非数值数据
 X=pd.Series(np.random.choice(['a','b','c'],p=[0.2,0.3,0.5],size=1000))
+X2=pd.Series(np.random.normal(10,5,size=1000))
+# 数值数据
 y=pd.Series(np.random.choice(['g','b'],p=[0.7,0.3],size=1000))
 y1=pd.Series(np.random.choice(['g','b','n'],p=[0.6,0.3,0.1],size=1000))
-
+# 评分卡预测概率数据
 xp=np.zeros(1000)
 t1=np.random.normal(0.3,0.1,size=(y=='g').sum())
 t1[t1<0]=0
@@ -20,12 +24,20 @@ t2[t2>1]=1
 xp[y=='g']=t1
 xp[y=='b']=t2
 xp=pd.Series(xp)
-  
-d=np.random.normal(10,5,size=1000)
+
+chiStats = stats.chi2_contingency(observed=fo)  
 
 
+def chi2(X,y):
+    N=pd.Series(y).count()
+    fo=pd.crosstab(X,y)
+    fe=stats.contingency.expected_freq(fo)
+    weight_chi2=(fo-fe)**2/fe/N/min(fo.shape[0],fo.shape[1])
+    weight_chi2=weight_chi2.sum(axis=1)
+    return weight_chi2
 
-def woe_binary(X,y):
+
+def woe(X,y):
     ctable=pd.crosstab(X,y)
     # 如果有0则每一项都加1
     ctable=ctable+1 if (ctable==0).any().any() else ctable
@@ -54,8 +66,6 @@ def woe_binary(X,y):
 
 
 
-
-
 def _freedman_diaconis_bins(a):
     """Calculate number of hist bins using Freedman-Diaconis rule."""
     # From http://stats.stackexchange.com/questions/798/
@@ -64,6 +74,15 @@ def _freedman_diaconis_bins(a):
     h = 2*iqr/(len(a)**(1/3))
     bins=int(np.ceil((a.max()-a.min())/h)) if h!=0 else int(np.sqrt(a.size))
     return bins
+
+
+def info_value(X,y):
+
+
+
+
+
+
 
 
 class entropy():
