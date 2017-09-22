@@ -3,8 +3,9 @@
 import pandas as pd
 import numpy as np
 from scipy import stats
+#from collections import Iterable
 
-
+'''
 # 测试数据集
 np.random.seed(100000)
 # 非数值数据
@@ -24,45 +25,54 @@ t2[t2>1]=1
 xp[y=='g']=t1
 xp[y=='b']=t2
 xp=pd.Series(xp)
-
-chiStats = stats.chi2_contingency(observed=fo)  
-
-
-def chi2(X,y):
-    N=pd.Series(y).count()
-    fo=pd.crosstab(X,y)
-    fe=stats.contingency.expected_freq(fo)
-    weight_chi2=(fo-fe)**2/fe/N/min(fo.shape[0],fo.shape[1])
-    weight_chi2=weight_chi2.sum(axis=1)
-    return weight_chi2
+'''
 
 
-def woe(X,y):
-    ctable=pd.crosstab(X,y)
-    # 如果有0则每一项都加1
-    ctable=ctable+1 if (ctable==0).any().any() else ctable
-    if ctable.shape[1]==2:
-        n_g,n_b=ctable.sum()
-        ctable=(ctable/ctable.sum()).assign(woe=lambda x:np.log2(x.iloc[:,0]/x.iloc[:,1]))\
-        .assign(ivi=lambda x:(x.iloc[:,0]-x.iloc[:,1])*x['woe'])
-        return ctable.loc[:,['woe','ivi']]
-    else:
-        woe_dict={}
-        p=ctable.sum()/ctable.sum().sum()
-        for cc in ctable.columns:
-            ctable_bin=pd.DataFrame(index=ctable.index,columns=['one','rest'])
-            ctable_bin['one']=ctable.loc[:,cc]
-            ctable_bin['rest']=ctable.loc[:,~(ctable.columns==cc)].sum(axis=1)
-            n_o,n_r=ctable_bin.sum()
-            ctable_bin=ctable_bin/ctable_bin.sum()
-            ctable_bin['woe']=np.log2(ctable_bin['one']/ctable_bin['rest'])
-            ctable_bin['ivi']=(ctable_bin['one']-ctable_bin['rest'])*ctable_bin['woe']
-            woe_dict[cc]=ctable_bin.loc[:,['woe','ivi']]
-        tmp=0
-        for cc in ctable.columns:
-            tmp+=woe_dict[cc]*p[cc]
-        woe_dict['avg']=tmp
-        return woe_dict        
+
+class feature_encoder():
+    '''
+    用于单个特征对因变量的分析，如
+    - 该特征中每个item的影响力
+    - 对item重编码
+ 
+    '''
+
+    def chi2(X,y):
+        N=pd.Series(y).count()
+        fo=pd.crosstab(X,y)
+        fe=stats.contingency.expected_freq(fo)
+        weight_chi2=(fo-fe)**2/fe/N/min(fo.shape[0],fo.shape[1])
+        weight_chi2=weight_chi2.sum(axis=1)
+        return weight_chi2
+    
+    
+    def woe(X,y):
+        ctable=pd.crosstab(X,y)
+        # 如果有0则每一项都加1
+        ctable=ctable+1 if (ctable==0).any().any() else ctable
+        if ctable.shape[1]==2:
+            n_g,n_b=ctable.sum()
+            ctable=(ctable/ctable.sum()).assign(woe=lambda x:np.log2(x.iloc[:,0]/x.iloc[:,1]))\
+            .assign(ivi=lambda x:(x.iloc[:,0]-x.iloc[:,1])*x['woe'])
+            return ctable.loc[:,['woe','ivi']]
+        else:
+            woe_dict={}
+            p=ctable.sum()/ctable.sum().sum()
+            for cc in ctable.columns:
+                ctable_bin=pd.DataFrame(index=ctable.index,columns=['one','rest'])
+                ctable_bin['one']=ctable.loc[:,cc]
+                ctable_bin['rest']=ctable.loc[:,~(ctable.columns==cc)].sum(axis=1)
+                n_o,n_r=ctable_bin.sum()
+                ctable_bin=ctable_bin/ctable_bin.sum()
+                ctable_bin['woe']=np.log2(ctable_bin['one']/ctable_bin['rest'])
+                ctable_bin['ivi']=(ctable_bin['one']-ctable_bin['rest'])*ctable_bin['woe']
+                woe_dict[cc]=ctable_bin.loc[:,['woe','ivi']]
+            tmp=0
+            for cc in ctable.columns:
+                tmp+=woe_dict[cc]*p[cc]
+            woe_dict['avg']=tmp
+            return woe_dict        
+
 
 
 
@@ -76,16 +86,47 @@ def _freedman_diaconis_bins(a):
     return bins
 
 
-def info_value(X,y):
+
+def chisquare(X,y):
+    chi2_value=pd.Series(index=X.columns)
+    chi2_pvalue=pd.Series(index=X.columns)
+    for c in X.columns:
+        fo=pd.crosstab(X[c],y)
+        s=stats.chi2_contingency(fo)
+        chi2_value[c]=s[0]
+        chi2_pvalue[c]=s[1]
+    return (chi2_value,chi2_pvalue)
 
 
 
 
+def info_value(X,y,bins=None):
+    '''
+    计算X和y之间的IV值
+    IV=\sum (g_k/n_g-b_k/n_b)*log2(g_k*n_b/n_g/)
+    '''
+    if bins is not None:
+        X=pd.cut(X,bins)
+    ctable=pd.crosstab(X,y)
+    p=ctable.sum()/ctable.sum().sum()   
+    if ctable.shape[1]==2:
+        ctable=ctable/ctable.sum()
+        IV=((ctable.iloc[:,0]-ctable.iloc[:,1])*np.log2(ctable.iloc[:,0]/ctable.iloc[:,1])).sum()
+        return IV
+    
+    IV=0
+    for cc in ctable.columns:
+        ctable_bin=pd.concat([ctable[cc],ctable.loc[:,~(ctable.columns==cc)].sum(axis=1)],axis=1)
+        ctable_bin=ctable_bin/ctable_bin.sum()
+        IV_bin=((ctable_bin.iloc[:,0]-ctable_bin.iloc[:,1])*np.log2(ctable_bin.iloc[:,0]/ctable_bin.iloc[:,1])).sum()
+        IV+=IV_bin*p[cc]
+    return IV
 
 
 
 
 class entropy():
+    
     '''
     计算样本的熵以及相关的指标
     函数的输入默认均为原始的样本集
@@ -229,16 +270,3 @@ class entropy():
             h=(p*np.log2(p/q)).sum()
 
         return h
-
-
-
-
-
-
-
-
-
-
-
-
-    
