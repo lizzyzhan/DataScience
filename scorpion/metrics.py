@@ -28,6 +28,22 @@ xp=pd.Series(xp)
 '''
 
 
+'''
+模型统一形式：
+parameter
+--------
+X,模型输入数据,且只处理一个特征
+y,模型输出数据，可以缺省
+bins,连续数据离散化参数,缺省auto
+
+return
+------
+h
+'''
+
+
+
+
 
 class feature_encoder():
     '''
@@ -100,11 +116,17 @@ def chisquare(X,y):
 
 
 
-def info_value(X,y,bins=None):
+def info_value(X,y,bins='auto'):
     '''
     计算X和y之间的IV值
     IV=\sum (g_k/n_g-b_k/n_b)*log2(g_k*n_b/n_g/)
     '''
+    threshold=[]
+    for q in [0.05,0.04,0.03,0.02,0.01,1e-7]:
+         t_down=max([X[y==k].quantile(q) for k in y.dropna().unique()])
+         t_up=min([X[y==k].quantile(1-q) for k in y.dropna().unique()])
+         threshold.append((t_down,t_up))
+  
     if bins is not None:
         X=pd.cut(X,bins)
     ctable=pd.crosstab(X,y)
