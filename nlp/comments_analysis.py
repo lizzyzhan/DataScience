@@ -26,7 +26,8 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
 from sklearn.decomposition import TruncatedSVD, NMF, LatentDirichletAllocation
 from sklearn.cluster import KMeans
-
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection.univariate_selection import chi2, f_classif
 
 
 def clean_text(text):
@@ -51,6 +52,8 @@ def clean_text(text):
     text = re.sub("zte", "中兴", text) #英文转中文
     text = re.sub("nubia", "努比亚", text) #英文转中文
     text = '' if re.findall('^[a-z\d\.\s]+$',text) else text # 全是字母/数字/空格/.就去掉
+    text = re.sub('[a-z\.]{6,}','',text)
+    text = re.sub(u'[^\u4e00-\u9fa5a-z0-9]+',' ',text)
     return text
 
 
@@ -87,7 +90,7 @@ def jieba_cut(texts,add_words=[],stopwords=[]):
     
     return
     ------
-    texts: 列表格式，将分词后的结果用空格隔开，如： 这 手机 不错
+    texts: pd.Series格式，将分词后的结果用空格隔开，如： 这 手机 不错
     '''
     
     if isinstance(add_words,str):
@@ -109,8 +112,13 @@ def jieba_cut(texts,add_words=[],stopwords=[]):
         f=open(stopwords,encoding='utf-8')
         stopwords=f.readlines()
         stopwords=[s.strip() for s in stopwords]
+    if isinstance(texts,pd.core.series.Series):
+        index=texts.index
+    else:
+        index=range(len(texts))
     texts = [' '.join([word for word in list(jieba.cut(doc)) if word not in stopwords]) for doc in texts]
     texts=[re.sub('\s[a-z\.]+\s|^[a-z\.]+\s|\s[a-z\.]+$|\s[\d\.]+\s|^[\d\.]+\s|\s[\d\.]+$',' ',s) for s in texts]# 去掉分词结果中全是字母或数字的
+    texts=pd.Series(texts,index=index)
     return texts
 
 
@@ -124,25 +132,109 @@ def polysemy_replace(texts,words=[]):
     return texts
 
 
+
+def _isrubbish(x,keywords):
+    flag=False
+    x=('%s'%x).strip()
+    x=re.sub(r'\s+',' ',x)
+    if len(x)==0:
+        flag=True
+    else:
+        words=x.split(' ')
+        rate=len(set(words)&set(keywords))/len(words)
+        flag=True if rate>=0.5 else False
+    return flag
+
+
 def cleaning(texts,initial_words=[]):
-    '''
-    清除垃圾评论
-    '''
-    vectorizer = TfidfVectorizer()
-    text_vec = vectorizer.fit_transform(texts)
+    texts_vec,words=text2vec(texts)
+    texts_feature=np.dot(texts_vec.T,texts_vec)
+    feature_norm=np.sqrt(texts_feature.diagonal())
+    texts_feature=texts_feature/np.dot(feature_norm.reshape((-1,1)),feature_norm.reshape(1,-1))
+    texts_feature=texts_feature-np.eye(texts_feature.shape[0])  
+    similar_words=[]
+    for w in initial_words:
+        if w in words:
+            ind=words.index(w)
+            tmp=texts_feature[:,ind]
+            a,b=np.where(tmp>=0.8)
+            similar_words+=[words[i] for i in a]
+    invalid_texts=texts.map(lambda x:_isrubbish(x,similar_words))        
+    return invalid_texts
 
-    
+ 
 
-def text2vec(texts,vec_model='tfidf'):
+def text2vec(texts,vec_model='idf'):
     '''
     向量化
     '''
-    vectorizer = CountVectorizer() if vec_model == "tf" else TfidfVectorizer()
+    if vec_model == "idf":
+        vectorizer = TfidfVectorizer(min_df=2,max_df=0.95,ngram_range=(1,3),sublinear_tf=True)
+    else:
+        vectorizer = CountVectorizer()
     texts_vec = vectorizer.fit_transform(texts)
     #texts_vec=texts_vec.toarray()
     words=vectorizer.get_feature_names()
     return texts_vec,words
     
+def comments_wordcloud(contents,filename='词云.png'):
+    from PIL import Image
+    from wordcloud import WordCloud
+    d = 'mask_circle.png'
+    mask = np.array(Image.open(d))
+    background_color='white'
+    # 好评数据
+    if not(isinstance(contents,str)):
+        contents=' '.join(contents)
+    wordcloud = WordCloud(background_color = background_color,font_path='DroidSansFallback.ttf', mask = mask)
+    wordcloud.generate(contents)
+    wordcloud.to_image().save(filename)
+    keywords=[(w[0][0],w[0][1],w[1],w[2][0],w[2][1]) for w in wordcloud.layout_]
+    comments_keys=pd.DataFrame(keywords,columns=['key','count','font_size', 'position_x','position_y'])
+    return comments_keys
+
+
+
+def find_topic(texts, score=None,topic_model='lda', n_topics=10, vec_model="idf", thr=1e-2,\
+feature_selection=None, **kwargs):
+    """Return a list of topics from texts by topic models - for demostration of simple data
+    texts: array-like strings
+    topic_model: {"nmf", "svd", "lda", "kmeans"} for LSA_NMF, LSA_SVD, LDA, KMEANS (not actually a topic model)
+    n_topics: # of topics in texts
+    vec_model: {"tf", "tfidf"} for term_freq, term_freq_inverse_doc_freq
+    thr: threshold for finding keywords in a topic model
+    """
+    ## 1. vectorization
+    if vec_model == "idf":
+        vectorizer = TfidfVectorizer( min_df=2, max_df=0.95, max_features = 200000, ngram_range = (1, 3),
+                              sublinear_tf = True )
+    else:
+        vectorizer = CountVectorizer()
+    text_vec = vectorizer.fit_transform(texts)
+    words = np.array(vectorizer.get_feature_names())
+    if feature_selection is not None:
+        selector = SelectKBest(chi2,k=feature_selection).fit(text_vec,score)
+        informative_words_index = selector.get_support(indices=True)
+        words = [words[i] for i in informative_words_index]
+
+    ## 2. topic finding
+    topic_models = {"nmf": NMF, "svd": TruncatedSVD, "lda": LatentDirichletAllocation, "kmeans": KMeans}
+    topicfinder = topic_models[topic_model](n_topics, **kwargs).fit(text_vec)
+    topic_dists = topicfinder.components_ if topic_model is not "kmeans" else topicfinder.cluster_centers_
+    topic_dists /= topic_dists.max(axis = 1).reshape((-1, 1))   
+    ## 3. keywords for topics
+    ## Unlike other models, LSA_SVD will generate both positive and negative values in topic_word distribution,
+    ## which makes it more ambiguous to choose keywords for topics. The sign of the weights are kept with the
+    ## words for a demostration here
+    def _topic_keywords(topic_dist):
+        keywords_index = np.abs(topic_dist) >= thr
+        keywords_prefix = np.where(np.sign(topic_dist) > 0, "", "^")[keywords_index]
+        keywords = " | ".join(map(lambda x: "".join(x), zip(keywords_prefix, words[keywords_index])))
+        return keywords
+    
+    topic_keywords = map(_topic_keywords, topic_dists)
+    return "\n".join("Topic %i: %s" % (i, t) for i, t in enumerate(topic_keywords))
+
 
 
 
@@ -151,14 +243,78 @@ def text2vec(texts,vec_model='tfidf'):
 data=load_data('./data/红米4A.xlsx')
 texts=jieba_cut(data['content'],'mobile_dict.txt','.\\stopwords\\chinese.txt')
 
-texts_vec,words=text2vec(texts)
+initial_words=[
+    '女娲造人',
+    '混沌初开',
+    '天崩地裂',
+    '永不变心',
+    '寝食难安',
+    '七彩祥云',
+    '七经八脉',
+    '焚香祷告',
+    '凑齐银两',
+    '呜呼哀哉',
+    '海枯石烂',
+    '阅商无数',
+    '顶天立地']
+log=cleaning(texts,initial_words)
+score=data['score']
 
-texts_feature=np.dot(texts_vec.T,texts_vec)
 
-for w in initial_words:
-    if w in words:
-        ind=words.index(w)
-        texts_feature[:,ind].sort()
+# 
+'''
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection.univariate_selection import chi2, f_classif
+vectorizer = TfidfVectorizer(min_df=2, max_df=0.95,ngram_range = (1,4),sublinear_tf = True)
+texts_vec = vectorizer.fit_transform(texts[~log])
+words=vectorizer.get_feature_names()
+selector = SelectKBest(chi2,k=50).fit(texts_vec, data.loc[~log,'score'])
+informative_words_index = selector.get_support(indices=True)
+labels = [words[i] for i in informative_words_index]
+'''
+
+
+'''
+
+s=find_topic(texts[(~log)&(data['score']==5)], topic_model='lda', n_topics=10, vec_model="idf", thr=0.2)
+print(s)
+'''
+
+'''
+vectorizer = TfidfVectorizer( min_df=2, max_df=0.95,ngram_range = (2, 4), sublinear_tf = True )
+
+texts_vec = vectorizer.fit_transform(texts)
+
+
+texts_vec,words=text2vec(texts[~log])
+lda=LatentDirichletAllocation()
+lda.fit(texts_vec)
+components=lda.components_
+'''
+
+
+
+#w=comments_wordcloud(texts[(~log)&(data['score']<3)],filename='差评词云.png');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
