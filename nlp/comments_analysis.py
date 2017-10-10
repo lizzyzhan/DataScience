@@ -38,7 +38,6 @@ def clean_text(text):
     text=text.lower()# 小写
     text = text.replace('\r\n'," ") #新行，我们是不需要的
     text = text.replace('\n'," ") #新行，我们是不需要的
-    text = re.sub(r'\s',"",text) #新行，我们是不需要的
     text = re.sub(r"-", " ", text) #把 "-" 的两个单词，分开。（比如：july-edu ==> july edu）
     text = re.sub(r"\d+/\d+/\d+", "", text) #日期，对主体模型没什么意义
     text = re.sub(r"[0-2]?[0-9]:[0-6][0-9]", "", text) #时间，没意义
@@ -57,6 +56,9 @@ def clean_text(text):
     text = re.sub("nubia", "努比亚", text) #英文转中文
     text = '' if re.findall('^[a-z\d\.\s]+$',text) else text # 全是字母/数字/空格/.就去掉
     text = re.sub('[a-z\.]{6,}',' ',text)#去掉英文单词，无效英文等。仅保留产品型号等英文字母
+    text = re.sub('，',',',text)#
+    text = re.sub('。','.',text)#
+    text = re.sub('！','!',text)#
     text = re.sub(u'[^\u4e00-\u9fa5\u0000-\u007a]+',' ',text)#只保留中文、以及Unicode到字母z的那段（不包含中文标点符号）
     return text
 
@@ -79,7 +81,25 @@ def load_data(filename):
         return None
     df['content']=df['content'].map(lambda x:clean_text(x))
     texts=df.loc[df['content'].map(lambda x:len('%s'%x))>2,:]
+    texts=texts.reset_index(drop=True)
     return texts
+
+
+def keywords_agg(texts,keywords):
+    '''根据给定的关键词在评论预料中查找到相应的句子（非整条评论）
+    keywords='拍照|照片'
+    '''
+    def _keywords_find(s):
+        kf=re.compile('[\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039]+'+keywords+'[\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039]+')
+        tmp=re.findall(kf,s)
+        if tmp:
+            sentenses=' | '.join(tmp)
+        else:
+            sentenses=np.nan
+        return sentenses
+    texts_new=texts.map(_keywords_find)
+    texts_new=texts_new[texts_new.notnull()]
+    return texts_new  
 
 
 def jieba_cut(texts,add_words=[],stopwords=[]):
@@ -100,7 +120,7 @@ def jieba_cut(texts,add_words=[],stopwords=[]):
     if isinstance(add_words,str):
         f=open(add_words,encoding='utf-8')
         add_words=f.readlines()
-        add_words=[s.strip() for s in add_words]       
+        add_words=[s.strip() for s in add_words]
 
     texts_tmp=','.join(texts)
     # 手机内存、屏幕尺寸等
@@ -126,6 +146,7 @@ def jieba_cut(texts,add_words=[],stopwords=[]):
         s=re.sub('\s[a-z\.]+\s|^[a-z\.]+\s|\s[a-z\.]+$|\s[\d\.]+\s|^[\d\.]+\s|\s[\d\.]+$',' ',s)
         s=s.strip()
         s=re.sub(r'\s+',' ',s)
+        #s=re.sub(u'[^\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039\u0020]+','',s)#只保留中文、以及Unicode到字母z的那段（不包含中文标点符号）
         return s
     texts=map(_jieba_cut,texts)
     texts=pd.Series(texts,index=index)
@@ -299,7 +320,7 @@ def gensim_lda(texts,n_topics=10,n_words=10,vec_model='tf'):
 data=load_data('./data/红米4A.xlsx')
 texts=jieba_cut(data['content'],'mobile_dict.txt','.\\stopwords\\chinese.txt')
 texts=polysemy_replace(texts)
-scores=data['score'].reset_index(drop=True)
+scores=data['score']
 
 # 去除垃圾评论 
 initial_words=['女娲造人','混沌初开','天崩地裂','永不变心','寝食难安','七彩祥云',\
