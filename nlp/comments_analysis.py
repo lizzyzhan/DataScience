@@ -14,6 +14,9 @@ from gensim import corpora,models,similarities
 from gensim.models.ldamodel import LdaModel
 import jieba
 import jieba.analyse as analyse
+from orangecontrib import associate
+# associate.frequent_itemsets(X, min_support=0.2)
+# associate.association_rules(itemsets, min_confidence, itemset=None)
 
 
 
@@ -99,10 +102,10 @@ def keywords_agg(texts,keywords):
         return sentenses
     texts_new=texts.map(_keywords_find)
     texts_new=texts_new[texts_new.notnull()]
-    return texts_new  
+    return texts_new
 
 
-def jieba_cut(texts,add_words=[],stopwords=[]):
+def jieba_cut(texts,add_words=[],stopwords=[],POS=False):
     '''
     对中文文本进行分词，并将分词结果用空格隔开
     注：该函数不会删除样本
@@ -111,12 +114,13 @@ def jieba_cut(texts,add_words=[],stopwords=[]):
     texts: 可迭代文本对象，每一个对应着一个一份文档
     add_words: 自己添加的 jiaba 词典
     stopwords：停止词，用于分词
-    
+    POS：词性标注，默认不标注
+
     return
     ------
     texts: pd.Series格式，将分词后的结果用空格隔开，如： 这 手机 不错
     '''
-    
+
     if isinstance(add_words,str):
         f=open(add_words,encoding='utf-8')
         add_words=f.readlines()
@@ -141,23 +145,39 @@ def jieba_cut(texts,add_words=[],stopwords=[]):
     else:
         index=range(len(texts))
     def _jieba_cut(doc):
-        s=' '.join([word for word in list(jieba.cut(doc)) if word not in stopwords])
+        s=' '.join([word for word in jieba.cut(doc) if word not in stopwords])
         # 去掉分词结果中全是字母或数字的
         s=re.sub('\s[a-z\.]+\s|^[a-z\.]+\s|\s[a-z\.]+$|\s[\d\.]+\s|^[\d\.]+\s|\s[\d\.]+$',' ',s)
         s=s.strip()
         s=re.sub(r'\s+',' ',s)
         #s=re.sub(u'[^\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039\u0020]+','',s)#只保留中文、以及Unicode到字母z的那段（不包含中文标点符号）
         return s
-    texts=map(_jieba_cut,texts)
-    texts=pd.Series(texts,index=index)
-    return texts
+    if POS:
+        words_pos={}
+        texts_new=[]
+        for doc in texts:
+            words=jieba.posseg.cut(doc)
+            tmp=[(w.word,w.flag) for w in words if w.word not in stopwords]
+            words_pos.update(tmp)
+            s=' '.join([t[0] for t in tmp])
+            # 去掉分词结果中全是字母或数字的
+            s=re.sub('\s[a-z\.]+\s|^[a-z\.]+\s|\s[a-z\.]+$|\s[\d\.]+\s|^[\d\.]+\s|\s[\d\.]+$',' ',s)
+            s=s.strip()
+            s=re.sub(r'\s+',' ',s)
+            texts_new.append(s)
+        texts=pd.Series(texts_new,index=index)
+        return texts,words_pos
+    else:
+        texts=map(_jieba_cut,texts)
+        texts=pd.Series(texts,index=index)
+        return texts
 
 
 
 def polysemy_replace(texts):
     '''
     处理分词结果中的一词多义
-    
+
     '''
     # 持续改善
     polysemy={'老妈':'妈妈',
@@ -196,7 +216,7 @@ def cleaning(texts,initial_words=[]):
     texts_feature=np.dot(texts_vec.T,texts_vec)
     feature_norm=np.sqrt(texts_feature.diagonal())
     texts_feature=texts_feature/np.dot(feature_norm.reshape((-1,1)),feature_norm.reshape(1,-1))
-    texts_feature=texts_feature-np.eye(texts_feature.shape[0])  
+    texts_feature=texts_feature-np.eye(texts_feature.shape[0])
     similar_words=[]
     for w in initial_words:
         if w in words:
@@ -205,10 +225,10 @@ def cleaning(texts,initial_words=[]):
             tmp=texts_feature[:,ind]
             a,b=np.where(tmp>=0.8)
             similar_words+=[words[i] for i in a]
-    invalid_texts=texts.map(lambda x:_isrubbish(x,similar_words))        
+    invalid_texts=texts.map(lambda x:_isrubbish(x,similar_words))
     return invalid_texts
 
- 
+
 
 def text2vec(texts,vec_model='idf'):
     '''
@@ -240,7 +260,7 @@ def feature_engineering(texts_vec,scores,words=None,n_features=1500,score_func=N
     texts_vec=texts_vec[:,informative_words_index]
     return texts_vec,words
 
-    
+
 def comments_wordcloud(contents,filename='词云.png'):
     from PIL import Image
     from wordcloud import WordCloud
@@ -317,18 +337,83 @@ def gensim_lda(texts,n_topics=10,n_words=10,vec_model='tf'):
 
 
 
+
+
+
+
 data=load_data('./data/红米4A.xlsx')
-texts=jieba_cut(data['content'],'mobile_dict.txt','.\\stopwords\\chinese.txt')
+#texts=jieba_cut(data['content'],'mobile_dict.txt','.\\stopwords\\chinese.txt')
+texts,pos=jieba_cut(data['content'],'mobile_dict.txt','.\\stopwords\\chinese.txt',POS=True)
 texts=polysemy_replace(texts)
 scores=data['score']
 
-# 去除垃圾评论 
+# 去除垃圾评论
 initial_words=['女娲造人','混沌初开','天崩地裂','永不变心','寝食难安','七彩祥云',\
 '七经八脉', '焚香祷告','凑齐银两','呜呼哀哉','海枯石烂','阅商无数','顶天立地','欣喜若狂',\
 '乃是','天上','三斧','小生', '七彩', '祥云','吾','宝物']
 invalid=cleaning(texts,initial_words)
 texts=texts[~invalid]
 scores=scores[~invalid]
+
+
+
+# Opinion
+texts_vec,words=text2vec(texts,vec_model='tf')
+# associate.association_rules(itemsets, min_confidence, itemset=None)
+gen=associate.frequent_itemsets(texts_vec, min_support=0.005)
+sup=list(gen)
+#sup1=[('|'.join([words[i] for i in s[0]]),s[1]) for s in sup if len(s[0])==2]
+sup1=[[words[i] for i in s[0]] for s in sup if len(s[0])==2]
+
+# 筛选出特征
+# 筛选出 一个为名词，一个为形容词的特征，同时将名词排前面
+sup2=[sorted(s,key=lambda x:pos[x]!='n') for s in sup1 if set([pos[s[0]],pos[s[1]]])==set(['n','a'])]
+# 筛选出在句子中较为接近的词
+
+# 从中选出名词和形容词配对那些特征词
+def dis_of_keywords(s,texts):
+    '''返回两个词在评论预料中的距离
+    parametre
+    --------
+    s:['手机','不错']
+    texts: 经过分词后的预料['买 手机 不错 喜欢 京东',]
+    '''
+    dis=[]
+    for text in texts:
+        w=np.array(text.split(' '))
+        ind=np.inf
+        if (s[0] in w) and (s[1] in w):
+            ind1=np.where(w==s[0])[0]
+            ind2=np.where(w==s[1])[0]
+            for i in ind1:
+                ind=min(ind,np.abs(ind2-i).min())
+        dis.append(ind)
+    dis=pd.Series(dis)
+    dis=dis[dis<np.inf].quantile(0.05,'nearest')
+    return dis
+
+sup3=[]
+for kw in sup2:
+    dis=dis_of_keywords(kw,texts)
+    if dis<2:
+        sup3.append(kw)
+
+feature0=list(set([s[0] for s in sup3]))
+opinion_words=list(set([s[1] for s in sup3]))
+# 通过意见词找其他词
+
+def feature_find(text,opinion):
+    # 计算由keywords_agg()生成的语料
+    text=text.split(' | ')
+    for doc in text:
+        words=jieba.posseg.cut(doc)
+        tmp=[(w.word,w.flag) for w in words]
+        # 找到里面的名词再找到意见词，返回距离最近的那一组
+
+
+
+print(feature0)
+
 
 
 N=len(texts)
@@ -338,17 +423,15 @@ texts_tmp=texts[scores==5]
 print('一共有{}条，占比 {:.1f}%'.format(len(texts_tmp),len(texts_tmp)*100/N))
 w=comments_wordcloud(texts_tmp,filename='好评词云.png');
 gensim_lda(texts_tmp,n_topics=10,n_words=10);
-          
+
 print('-'*20+'【中评】'+'-'*20)
 texts_tmp=texts[(scores<5)&(scores>=3)]
 print('一共有{}条，占比 {:.1f}%'.format(len(texts_tmp),len(texts_tmp)*100/N))
 w=comments_wordcloud(texts_tmp,filename='中评词云.png');
 gensim_lda(texts_tmp,n_topics=10,n_words=10);
-          
+
 print('-'*20+'【差评】'+'-'*20)
 texts_tmp=texts[scores<5]
 print('一共有{}条，占比 {:.1f}%'.format(len(texts_tmp),len(texts_tmp)*100/N))
 w=comments_wordcloud(texts_tmp,filename='差评词云.png');
 gensim_lda(texts_tmp,n_topics=10,n_words=10);
-
-         
