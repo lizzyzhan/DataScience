@@ -17,7 +17,7 @@ import jieba.analyse as analyse
 from orangecontrib import associate
 # associate.frequent_itemsets(X, min_support=0.2)
 # associate.association_rules(itemsets, min_confidence, itemset=None)
-
+from snownlp import SnowNLP
 
 
 
@@ -115,7 +115,6 @@ def jieba_cut(texts,add_words=[],stopwords=[],POS=False):
     add_words: 自己添加的 jiaba 词典
     stopwords：停止词，用于分词
     POS：词性标注，默认不标注
-
     return
     ------
     texts: pd.Series格式，将分词后的结果用空格隔开，如： 这 手机 不错
@@ -177,7 +176,6 @@ def jieba_cut(texts,add_words=[],stopwords=[],POS=False):
 def polysemy_replace(texts):
     '''
     处理分词结果中的一词多义
-
     '''
     # 持续改善
     polysemy={'老妈':'妈妈',
@@ -357,7 +355,7 @@ scores=scores[~invalid]
 
 
 
-# Opinion
+# =====================Opinion================================
 texts_vec,words=text2vec(texts,vec_model='tf')
 # associate.association_rules(itemsets, min_confidence, itemset=None)
 gen=associate.frequent_itemsets(texts_vec, min_support=0.005)
@@ -392,27 +390,76 @@ def dis_of_keywords(s,texts):
     dis=dis[dis<np.inf].quantile(0.05,'nearest')
     return dis
 
+
+
+def dis_of_pairwords(s,texts):
+    '''返回两个词在评论预料中的距离
+    parametre
+    --------
+    s:['手机','不错']
+    texts: 语料
+    '''
+    dis=[]
+    pattern=re.compile(s[0]+'.*?'+s[1]+'|'+s[1]+'.*?'+s[0])
+    for text in texts:
+        tmp=re.findall(pattern,text)
+        dis0=len(tmp[0])-len(s[0])-len(s[1]) if tmp else np.nan
+        dis.append(dis0)
+    dis=pd.Series(dis)
+    dis=dis[dis.notnull()].quantile(0.05,'nearest')
+    return dis
+
+
+
 sup3=[]
 for kw in sup2:
-    dis=dis_of_keywords(kw,texts)
-    if dis<2:
+    dis=dis_of_pairwords(kw,texts)
+    if dis<4:
         sup3.append(kw)
 
-feature0=list(set([s[0] for s in sup3]))
+
+
+
+features_frequent=list(set([s[0] for s in sup3]))
 opinion_words=list(set([s[1] for s in sup3]))
 # 通过意见词找其他词
 
-def feature_find(text,opinion):
+def feature_find(texts,opinion):
     # 计算由keywords_agg()生成的语料
-    text=text.split(' | ')
-    for doc in text:
-        words=jieba.posseg.cut(doc)
-        tmp=[(w.word,w.flag) for w in words]
+    pattern1=re.compile(r'([^\s]*?)/n[^n]*?'+opinion)
+    pattern2=re.compile(r''+opinion+'/a[^n]*?\s([^\s]*?)/n')
+    feature_words=[]
+    for docs in texts: 
+        doc=docs.split(' | ')
+        for s in doc:
+            words=jieba.posseg.cut(s)
+            tmp=' '.join([w.word+'/'+w.flag for w in words])
+            fw1=re.findall(pattern1,tmp)
+            fw2=re.findall(pattern2,tmp)
+            feature_words+=fw1
+            feature_words+=fw2
+    return feature_words
+        
         # 找到里面的名词再找到意见词，返回距离最近的那一组
+fw_raw=[]
+for ow in opinion_words:
+    texts_key=keywords_agg(data['content'],ow)
+    fw_raw+=feature_find(texts_key,ow)
+features_infrequent=[fw for fw in set(fw_raw) if fw_raw.count(fw)>2]
+features=list(set(features_frequent+features_infrequent))
+print(features)
 
 
+features_opinion={}
+# features
+for fw in ['习大大']:
+    texts_fw=keywords_agg(data['content'],fw)
+    sc=texts_fw.map(lambda x:SnowNLP(x).sentiments)
+    p=len(sc[sc>0.5])/len(sc) if len(sc)>0 else np.nan
+    features_opinion[fw]=(len(sc),'{:.2f}%'.format(p*100),'{:.2f}%'.format(100-p*100))
 
-print(feature0)
+print(features_opinion)    
+
 
 
 
