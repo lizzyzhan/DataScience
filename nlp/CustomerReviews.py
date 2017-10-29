@@ -70,11 +70,13 @@ def jieba_cut(texts,userdict=None,stopwords=None,POS=False,add_words=[]):
     r 代词,rr 人称代词,rz 指示代词,ry 疑问代词,rg 代词性语素
     s 处所词,t 时间词,u 助词,v 动词,w 标点符号,x 字符串,y 语气词(delete yg),z 状态词
     '''
+    '''
     userdict='mobile_dict.txt'
     stopwords='.\\stopwords\\chinese.txt'
     add_words=color
     POS=True
     texts=tt.texts_raw
+    '''
 
 
     if  userdict is not None:
@@ -124,38 +126,87 @@ def jieba_cut(texts,userdict=None,stopwords=None,POS=False,add_words=[]):
 
 class Reviews():
     """初始化"""
-    def __init__(self, contents=None,scores=None,data=None,language=None):
+    def __init__(self, texts=None,scores=None,creationTime=None,data=None,language='cn'):
         '''初始化需要两个数据，一份是评论，一份是评分
-        如果给定data,则contents和scores是对应的列名字，否则contents是具体的数组
+        如果给定data,则texts和scores是对应的列名字，否则contents是具体的数组
+        评论数据支持以下字段：
+        评论：texts
+        评分：scores
+        评论时间：creationTime      
         '''
         if data is not None:
             '''此时contents和scores肯定存在'''
-            texts=data[contents]
-            scores=data[scores]     
-        if scores is not None:
+            if isinstance(texts,str):
+                texts=data[texts]
+            if isinstance(scores,str):
+                scores=data[scores]
+            if isinstance(creationTime,str):
+                creationTime=data[creationTime]
+        if not(isinstance(scores,pd.core.series.Series)):
             scores=pd.Series(scores)
-        if contents is not None:
-            texts=pd.Series(contents)
+        if not(isinstance(texts,pd.core.series.Series)):
+            texts=pd.Series(texts)
+        if not(isinstance(creationTime,pd.core.series.Series)):
+            creationTime=pd.Series(creationTime)
         if texts is not None:
             texts=texts.map(lambda x:self.cleaning(x))
             ind=texts.map(lambda x:len('%s'%x)>2)
             texts=texts[ind].reset_index(drop=True)
         if scores is not None:
-            scores=scores[ind].reset_index(drop=True)       
+            scores=scores[ind].reset_index(drop=True)
+            scores=scores.replace({1:'差评',2:'中评',3:'中评',4:'好评',5:'好评'})
+        if creationTime is not None:
+            creationTime=pd.to_datetime(creationTime)
         self.texts_raw=texts#原始语料
+        self.scores=scores
+        self.creationTime=creationTime
         self.language=language#暂时只适配中文，后期会适配英文、德文等
-        if language in ['english','en']:
-            # 部分语系不需要分词
-            self.texts_seg=self.texts_raw
-        else:
-            self.texts_seg=None
+        self.texts_seg=None
         self.texts_vec_idf=None#(向量化稀疏数组,words)
         self.texts_vec_tf=None#(向量化稀疏数组,words)
-        self.scores=scores
         self.pos={}
+        self.initial_length=len(texts) if texts is not None else 0# 语料的初始样本数
+        
+    def __len__(self):
+        return len(self.texts_raw)
+        
+        
+    def describe(self):
+        r=pd.Series(index=['样本数','平均字符数','好评','中评','差评'])
+        n=len(self.texts_raw)
+        r['样本数']='{:.0f}'.format(n)
+        r['平均字符数']='{:.1f}'.format(self.texts_raw.map(lambda x:len(x)).mean())
+        tmp=self.scores.value_counts()
+        r['好评']='{}({:.2f}%)'.format(tmp['好评'],tmp['好评']*100/n)
+        r['中评']='{}({:.2f}%)'.format(tmp['中评'],tmp['中评']*100/n)
+        r['差评']='{}({:.2f}%)'.format(tmp['差评'],tmp['差评']*100/n)
+        return r
 
 
     def cleaning(self,text):
+
+        '''中文标点符号处理
+        ():\u0028、\u0029
+        。:\u3002
+        .:\u002e
+        ？:\uff1f
+        ?:\u003f
+        ！:\uff01
+        !:\u0021
+        ，:\uff0c
+        ,:\u002c
+        、:\u3001
+        ；:\uff1b
+        ;:\u003b
+        ：:\uff1a
+        ::\u003a
+        -:\u2500
+        …:\u2026
+        《:\u300a
+        》:\u300a
+        〈:\u3008
+        〉:\u3009
+        '''
         text='%s'%text
         text=text.lower()# 小写
         text = text.replace('\r\n'," ") #新行，我们是不需要的
@@ -173,9 +224,28 @@ class Reviews():
         text = re.sub('。','.',text)#
         text = re.sub('！','!',text)#
         text = re.sub('？','?',text)#
-        text = re.sub(u'[^\u4e00-\u9fa5\u0000-\u007a]+',' ',text)#只保留中文、以及Unicode到字母z的那段（不包含中文标点符号）
+        text = re.sub(u'[^\u4e00-\u9fa5\u0000-\u007f]+',' ',text)#只保留中文、以及Unicode到字母z的那段（不包含中文标点符号）
         return text
 
+
+
+    def cut_sentences(self,texts=None,method='whole'):
+        '''将文本分割成句子'''
+        if texts is None:
+            texts=self.texts_raw
+        if method == 'whole':
+            pattern=re.compile(r'[\.?!]')
+        elif method == 'part':
+            pattern=re.compile(r'\.?!,、~')
+        else:
+            pattern=re.compile(r'[\.?!]')
+        def _sentence(text):
+            q=re.split(pattern,text[0])
+            if len(q[-1])==0:
+                q=q[:-1]
+            return q
+        texts=texts.map(_sentence)
+        return texts
 
 
     def find_keywords(self,keywords,texts=None):
@@ -284,7 +354,14 @@ class Reviews():
         
         具体参见函数：jieba_cut
         '''
-        texts_seg,words_pos=jieba_cut(self.texts_raw,userdict=product_dict,stopwords=stopwords,POS=True,add_words=add_words)
+        
+        if self.language in ['cn']:
+            texts_seg,words_pos=jieba_cut(self.texts_raw,userdict=product_dict,\
+            stopwords=stopwords,POS=True,add_words=add_words)
+        elif self.language in ['en']:
+            # 待完善
+            texts_seg=None
+            words_pos=None
         self.texts_seg=texts_seg
         self.pos=words_pos
         return self
@@ -352,6 +429,15 @@ class Reviews():
         dis=dis[dis.notnull()].quantile(0.05,'nearest')
         return dis
 
+    def sentiments(self,condition=None,method='snownlp'):
+        '''情感分析'''
+
+        texts=self.texts_raw[condition] if condition is not None else self.texts_raw
+        if method in ['snownlp']:
+            s=texts.map(lambda x:SnowNLP(x).sentiments)
+        return s
+
+
 
 
     def get_product_features(self,min_support=0.005,max_dis_pairwords=4):
@@ -407,7 +493,7 @@ class Reviews():
         return features
 
 
-    def features_sentiments(self,features=None,thr=0.5):
+    def features_sentiments(self,features=None,thr=0.5,method='snownlp'):
         '''产品特征词的情感分析
         parameter
         --------
@@ -425,13 +511,27 @@ class Reviews():
         N=len(self.texts_raw)
         for fw in features:
             texts_fw=self.find_keywords(fw)
+            if len(texts_fw)==0:
+                features_opinion.loc[fw,:]=[N,0,np.nan,np.nan]
+                features_corpus[fw]=texts_fw
+                continue
             features_corpus[fw]=texts_fw
             #features_corpus[fw]=' || '.join(texts_fw)
-            sc=texts_fw.map(lambda x:SnowNLP(x).sentiments)
-            features_corpus[fw]=pd.concat([texts_fw,sc],axis=1)
-            features_corpus[fw].columns=['sentences','sentiments']
-            p=len(sc[sc>thr])/len(sc) if len(sc)>0 else np.nan
-            features_opinion.loc[fw,:]=[N,len(sc),p,1-p]   
+            if method == 'snownlp':
+                thr1=(self.scores=='差评').sum()/N
+                thr2=(self.scores.isin(['差评','中评'])).sum()/N
+                sc=texts_fw.map(lambda x:SnowNLP(x).sentiments)
+                features_corpus[fw]=pd.concat([texts_fw,sc],axis=1)
+                features_corpus[fw].columns=['sentences','sentiments']
+                p_positive=len(sc[sc>thr2])/len(sc) if len(sc)>0 else np.nan
+                p_negative=len(sc[sc<=thr1])/len(sc) if len(sc)>0 else np.nan
+                p=len(sc[sc>thr])/len(sc) if len(sc)>0 else np.nan
+                features_opinion.loc[fw,:]=[N,len(sc),p,1-p]
+            elif method == 'score':
+                tmp=self.scores[texts_fw.index].value_counts()
+                p_positive=tmp['好评']/len(texts_fw) if '好评' in tmp else 0
+                p_negative=tmp['差评']/len(texts_fw) if '差评' in tmp else 0
+                features_opinion.loc[fw,:]=[N,len(texts_fw),p_positive,p_negative]
             #features_opinion[fw]=(len(sc),'{:.2f}%'.format(p*100),'{:.2f}%'.format(100-p*100))
         return features_opinion,features_corpus
 
@@ -461,14 +561,18 @@ class Reviews():
                 topic[1]])) for i,topic in enumerate(topics_keywords)]))
             return topics_keywords
 
-    def genwordcloud(self,condition=None,filename='评论词云.png',mask=None,background_color='white',\
-    font_path='DroidSansFallback.ttf',**kwargs):
+    def genwordcloud(self,condition=None,filename=None,mask=None,background_color='white',\
+    font_path='DroidSansFallback.ttf',imshow=True,**kwargs):
         '''生成词云
         # mask 是RGBA模式，最后一个分量是alpha通道, 如：mask_circle.png
         '''
         from PIL import Image
         from wordcloud import WordCloud
         
+        if (filename is not None) and (len(re.findall(u'[\u4e00-\u9fa5]+',filename))>0):
+            filename=' '.join(SnowNLP(filename).pinyin)
+        elif filename is None:
+            filename='wordcloud gen'
         if condition is not None:
             contents=self.texts_seg[condition]
         else:
@@ -489,37 +593,48 @@ class Reviews():
             mask=np.array(Image.open(mask))
         wordcloud = WordCloud(background_color = background_color,font_path=font_path, mask = mask)
         wordcloud.generate(contents)
-        wordcloud.to_image().save(filename)
+        if imshow:
+            fig = plt.figure(dpi=300)
+            ax = fig.add_subplot(111)
+            ax.imshow(wordcloud.to_image())
+            ax.axis('off')
+            ax.set_title(filename)
+        else:
+            wordcloud.to_image().save(filename+'.png')
         keywords=[(w[0][0],w[0][1],w[1],w[2][0],w[2][1]) for w in wordcloud.layout_]
         comments_keys=pd.DataFrame(keywords,columns=['key','count','font_size', 'position_x','position_y'])
         return comments_keys
 
 
-# ======================================================================
-initial_words=['女娲造人','混沌初开','天崩地裂','永不变心','寝食难安','七彩祥云',\
-'七经八脉', '焚香祷告','凑齐银两','呜呼哀哉','海枯石烂','阅商无数','顶天立地','欣喜若狂',\
-'乃是','天上','三斧','小生', '七彩', '祥云','吾','宝物','金光四射','金甲','天神']
-
-data=pd.read_excel('./data/红米4A.xlsx')
-color=list(data['productColor'].dropna().unique())
-tt=Reviews(data['content'],data['score'])
-tt.replace('synonyms.txt')
-tt.segment(product_dict='mobile_dict.txt',stopwords='.\\stopwords\\chinese.txt',add_words=color)
-tt.drop_invalid(initial_words=initial_words,max_rate=0.6)
-features=tt.get_product_features()
-print(features)
-features1=list(set(features)-set(['京东','物流']) | set(['拍照']))
-features_opinion,features_corpus=tt.features_sentiments(features=features,thr=0.5)
-
-# 好中差评论分析
-cc={'好评':tt.scores.isin([5]),'中评':tt.scores.isin([3,4]),'差评':tt.scores.isin([1,2])}
-for c in cc:
-    #topics_keywords=tt.find_topic(tt.scores.isin([5]))
-    keywords1=tt.get_keywords(cc[c])
-    print(c+'关键词：')
-    print('|'.join(keywords1))
-    tt.genwordcloud(cc[c],filename=c+'词云.png')
+if __name__=='__main__':
     
+    # ======================================================================
+    initial_words=['女娲造人','混沌初开','天崩地裂','永不变心','寝食难安','七彩祥云',\
+    '七经八脉', '焚香祷告','凑齐银两','呜呼哀哉','海枯石烂','阅商无数','顶天立地','欣喜若狂',\
+    '乃是','天上','三斧','小生', '七彩', '祥云','吾','宝物','金光四射','金甲','天神']
+    
+    data=pd.read_excel('./data/红米4A.xlsx')
+    color=list(data['productColor'].dropna().unique())
+    tt=Reviews(data['content'],data['score'])
+    tt.replace('synonyms.txt')
+    tt.segment(product_dict='mobile_dict.txt',stopwords='.\\stopwords\\chinese.txt',add_words=color)
+    tt.drop_invalid(initial_words=initial_words,max_rate=0.6)
+    features=tt.get_product_features()
+    print(features)
+    features1=list(set(features)-set(['京东','物流']) | set(['拍照']))
+    features_opinion,features_corpus=tt.features_sentiments(features=features,thr=0.5)
+    
+    # 好中差评论分析
+    cc={'好评':tt.scores.isin([5]),'中评':tt.scores.isin([3,4]),'差评':tt.scores.isin([1,2])}
+    for c in cc:
+        #topics_keywords=tt.find_topic(tt.scores.isin([5]))
+        keywords1=tt.get_keywords(cc[c])
+        print(c+'关键词：')
+        print('|'.join(keywords1))
+        tt.genwordcloud(cc[c],filename=c+'词云.png')
+    
+
+
 
 
 '''
@@ -541,6 +656,42 @@ print( '摘要：' )
 for item in tr4s.get_key_sentences(num=3):
     print(item.index, item.weight, item.sentence)  # index是语句在文本中位置，weight是权重
 '''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
