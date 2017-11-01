@@ -490,6 +490,7 @@ class Reviews():
             fw_raw+=_feature_find(texts_key,ow)
         features_infrequent=[fw for fw in set(fw_raw) if fw_raw.count(fw)>2]
         features=list(set(features_frequent+features_infrequent))
+        features=[f for f in features if len(f)>1]#去掉单个字的特征
         return features
 
 

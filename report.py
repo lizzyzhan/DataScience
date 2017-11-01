@@ -56,8 +56,8 @@ def pptx_layouts(prs):
             placeholder_size=0
             for k in range(len(slide.shapes)):
                 shape=slide.shapes[k]
-                if shape.is_placeholder and shape.has_text_frame:                    
-                    left,top=shape.left/slide_width,shape.top/slide_height                   
+                if shape.is_placeholder and shape.has_text_frame:
+                    left,top=shape.left/slide_width,shape.top/slide_height
                     height=shape.height/slide_height
                     if left<1 and top<1 and height<1 and left>0 and top>0 and height>0:
                         placeholder_size+=1
@@ -77,7 +77,7 @@ def get_texts(filename):
     # text_runs will be populated with a list of strings,
     # one for each text run in presentation
     text_runs = []
-    
+
     for slide in prs.slides:
         for shape in slide.shapes:
             if not shape.has_text_frame:
@@ -114,7 +114,7 @@ def df_to_table(slide,df,left,top,width,height,index_names=False,columns_names=T
             cell=res.table.cell(0,col_index+index_names)
             #cell.text_frame.fit_text(max_size=12)
             #cell.text_frame.text='%s'%(col_name)
-            cell.text = '%s'%(col_name)            
+            cell.text = '%s'%(col_name)
     if index_names:
         for col_index, col_name in enumerate(list(df.index)):
             cell=res.table.cell(col_index+columns_names,0)
@@ -166,9 +166,9 @@ def df_to_chartdata(df,datatype,number_format=None):
                 series_.add_data_point(d.iloc[i,0],d.iloc[i,1],d.iloc[i,2])
         return chart_data
 
-            
 
-def plot_table(prs,df,layouts=[0,5],title=u'我是标题',summary=u'我是简短的结论'):
+
+def plot_table(prs,df,layouts=[0,5],title=u'我是标题',summary=u'我是简短的结论',footnote=''):
     '''根据给定的数据，在给定的prs上新增一页表格ppt
     输入：
     prs: PPT文件接口
@@ -205,10 +205,28 @@ def plot_table(prs,df,layouts=[0,5],title=u'我是标题',summary=u'我是简短
     width=Emu(width*slide_width)
     height=Emu(height*slide_height)
     df_to_table(slide,df,left,top,width,height,index_names=True)
+    
+        # 添加脚注 footnote=u'这里是脚注'
+    if footnote:
+        left,top = Emu(0.025*slide_width), Emu(0.95*slide_height)
+        width,height = Emu(0.70*slide_width), Emu(0.10*slide_height)
+        txBox = slide.shapes.add_textbox(left, top, width, height)
+        #p = text_frame.paragraphs[0]
+        p=txBox.text_frame.paragraphs[0]
+        p.text=footnote
+        p.font.size = Pt(10)
+        p.font.language_id = 3076
+        p.font.name='Microsoft YaHei UI'
+        p.font.color.rgb=RGBColor(127,127,127)
+        try:
+            txBox.text_frame.fit_text(max_size=10)
+        except:
+            pass
+            #print('cannot fit the size of font')
     return prs
 
 
-def plot_textbox(prs,layouts=[0,0],title=u'我是文本框页标题',summary=u'我是内容'):
+def plot_textbox(prs,texts,title=u'我是文本框页标题',summary=u'我是内容',footnote='',layouts=[0,0]):
     '''
     只绘制一个文本框，用于目录、小结等
     '''
@@ -219,11 +237,36 @@ def plot_textbox(prs,layouts=[0,0],title=u'我是文本框页标题',summary=u'�
     slide = prs.slides.add_slide(title_only_slide)
     #title=u'这里是标题'
     slide.shapes.title.text = title
-    left,top = Emu(0.15*slide_width), Emu(0.10*slide_height)
+    # 绘制副标题
+    if summary:
+        left,top = Emu(0.15*slide_width), Emu(0.10*slide_height)
+        width,height = Emu(0.7*slide_width), Emu(0.1*slide_height)
+        txBox = slide.shapes.add_textbox(left, top, width, height)
+        txBox.text_frame.text=summary
+    # 绘制主体
+    left,top = Emu(0.15*slide_width), Emu(0.20*slide_height)
     width,height = Emu(0.7*slide_width), Emu(0.7*slide_height)
     txBox = slide.shapes.add_textbox(left, top, width, height)
-    txBox.text_frame.text=summary
+    txBox.text_frame.text=texts
 
+    # 添加脚注 footnote=u'这里是脚注'
+    if footnote:
+        left,top = Emu(0.025*slide_width), Emu(0.95*slide_height)
+        width,height = Emu(0.70*slide_width), Emu(0.10*slide_height)
+        txBox = slide.shapes.add_textbox(left, top, width, height)
+        #p = text_frame.paragraphs[0]
+        p=txBox.text_frame.paragraphs[0]
+        p.text=footnote
+        p.font.size = Pt(10)
+        p.font.language_id = 3076
+        p.font.name='Microsoft YaHei UI'
+        p.font.color.rgb=RGBColor(127,127,127)
+        try:
+            txBox.text_frame.fit_text(max_size=10)
+        except:
+            pass
+            #print('cannot fit the size of font')
+    return prs
 
 def plot_picture(prs,img_path,layouts=[0,0],title=u'我是文本框页标题',summary='',\
 footnote=''):
@@ -239,10 +282,10 @@ footnote=''):
     slide.shapes.title.text = title
     if summary:
         left,top = Emu(0.05*slide_width), Emu(0.10*slide_height)
-        width,height = Emu(0.7*slide_width), Emu(0.1*slide_height)    
+        width,height = Emu(0.7*slide_width), Emu(0.1*slide_height)
         txBox = slide.shapes.add_textbox(left, top, width, height)
         txBox.text_frame.text=summary
-    left,top = Emu(0.15*slide_width), Emu(0.10*slide_height)
+    left,top = Emu(0.15*slide_width), Emu(0.2*slide_height)
     height=Emu(0.7*slide_height)
     slide.shapes.add_picture(img_path, left, top, height=height)
     # 添加脚注 footnote=u'这里是脚注'
@@ -367,7 +410,7 @@ footnote=None,chart_format=None,layouts=[0,0],has_data_labels=True):
     except:
         pass
         #print('cannot fit the size of font')
-        
+
 
     # 添加脚注 footnote=u'这里是脚注'
     if footnote:
@@ -396,7 +439,7 @@ footnote=None,chart_format=None,layouts=[0,0],has_data_labels=True):
     #chart_loc=[0.10,0.30,0.80,0.60]
     left, top = Emu(config.chart_loc[0]*slide_width), Emu(config.chart_loc[1]*slide_height)
     width, height = Emu(config.chart_loc[2]*slide_width), Emu(config.chart_loc[3]*slide_height)
-    
+
     chart=slide.shapes.add_chart(chart_list[chart_type.upper()][0], \
     left, top, width, height, chart_data).chart
 
@@ -483,7 +526,100 @@ footnote=None,chart_format=None,layouts=[0,0],has_data_labels=True):
     '''
 
 
-def slides_data_gen(slides_data):
+def plot_cover(prs,title=u'reportgen工具包封面',layouts=[0,0],xspace=8,yspace=6):
+    try:
+        from delaunay import Delaunay2D
+    except:
+        return
+    slide_width=prs.slide_width
+    slide_height=prs.slide_height
+    # 可能需要修改以适应更多的情形
+    title_only_slide = prs.slide_masters[layouts[0]].slide_layouts[layouts[1]]
+    slide = prs.slides.add_slide(title_only_slide)
+
+    ## 随机生成连接点
+    seeds=np.round(np.dot(np.random.rand((xspace-1)*(yspace-1),2),np.diag([slide_width,slide_height])))
+    # 添加左边点
+    tmp=np.linspace(0,slide_height,yspace)
+    seeds=np.concatenate((seeds,np.array([[0]*len(tmp),tmp]).T))
+    # 添加上边点
+    tmp=np.linspace(0,slide_width,xspace)[1:]
+    seeds=np.concatenate((seeds,np.array([tmp,[0]*len(tmp)]).T))
+    # 添加右边点
+    tmp=np.linspace(0,slide_height,yspace)[1:]
+    seeds=np.concatenate((seeds,np.array([[slide_width]*len(tmp),tmp]).T))
+    # 添加下边点
+    tmp=np.linspace(0,slide_width,xspace)[1:-1]
+    seeds=np.concatenate((seeds,np.array([tmp,[slide_height]*len(tmp)]).T))
+
+    # 构造三角剖分，生成相应的三角形和平面图数据
+    center = np.mean(seeds, axis=0)
+    t=np.sqrt(slide_width**2+slide_height**2)/2
+    dt = Delaunay2D(center, 2**(np.floor(np.log2(t))+1))
+    for s in seeds:
+        dt.AddPoint(s)
+    tri=dt.exportTriangles()
+    graph=np.zeros((len(seeds),len(seeds)))
+    for t in tri:
+        graph[t[0],t[1]]=1
+        graph[t[1],t[2]]=1
+        graph[t[0],t[2]]=1
+        graph[t[1],t[0]]=1
+        graph[t[2],t[1]]=1
+        graph[t[2],t[1]]=1
+
+
+    from pptx.enum.shapes import MSO_CONNECTOR
+    from pptx.enum.shapes import MSO_SHAPE
+    shapes = slide.shapes
+    # 添加连接线
+    for i in range(len(seeds)):
+        for j in range(len(seeds)):
+            if (i<j) and graph[i,j]==1:
+                shapes.add_connector(
+                MSO_CONNECTOR.STRAIGHT, Emu(seeds[i,0]), Emu(seeds[i,1]), Emu(seeds[j,0]), Emu(seeds[j,1]))
+    # 添加圆点，原点的半径符合高斯分布
+    radius=slide_width/100
+    for i in range(len(seeds)):
+        eps=np.random.normal(scale=radius*0.2)
+        left=Emu(seeds[i,0])-radius-eps
+        top=Emu(seeds[i,1])-radius-eps
+        width=height=2*(radius+eps)
+        shape=shapes.add_shape(
+        MSO_SHAPE.OVAL,left, top, width, height)
+        shape.line.width=Emu(0)
+        fill = shape.fill
+        fill.solid()
+        fill.fore_color.rgb = RGBColor(218,227,243)
+
+    # 添加标题
+    left,top = Emu(0), Emu(0.4*slide_height)
+    width,height = Emu(1*slide_width), Emu(0.2*slide_height)
+    shape=shapes.add_shape(
+    MSO_SHAPE.RECTANGLE,left, top, width, height)
+    shape.line.width=Emu(0)
+    fill = shape.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(0,176,240)
+    shape.text=title
+
+    # 添加脚注
+    left,top = Emu(0.72*slide_width), Emu(0.93*slide_height)
+    width,height = Emu(0.25*slide_width), Emu(0.07*slide_height)
+    txBox = slide.shapes.add_textbox(left, top, width, height)
+    txBox.text_frame.text='POWERED BY REPORTGEN'
+
+    # 添加LOGO
+    import os
+    logo_path=os.path.join(os.path.split(__file__)[0],'logo.png')
+    if os.path.exists(logo_path):
+        left,top = Emu(0.65*slide_width), Emu(0.94*slide_height)
+        height=Emu(0.06*slide_height)
+        slide.shapes.add_picture(logo_path, left, top, height=height)
+    return prs
+
+
+def slides_data_gen(slides_data,chart_type_default='COLUMN_CLUSTERED'):
     '''自动补全pptx数据信息
     slides_data: 默认需可迭代
     每一页PPT设定为四个元素：标题、结论、主题、脚注
@@ -502,8 +638,8 @@ def slides_data_gen(slides_data):
     filename: 缺省以时间命名
     template:使用的模板
     '''
-    
-    
+
+
     title=''
     summary=''
     footnote=''
@@ -513,6 +649,7 @@ def slides_data_gen(slides_data):
     # 自动计算图表的格式
     #np.issubdtype(a.as_matrix().dtype,np.number)
     # 补全相关信息
+    slides_data_new=[]
     for i in range(len(slides_data)):
         slide=slides_data[i]
         # 补全相关信息,数据处理部分待定
@@ -525,11 +662,11 @@ def slides_data_gen(slides_data):
             slide['data_config']=None
             if isinstance(slide['data'],pd.core.frame.DataFrame):
                 slide['slide_type']='chart'
-                slide['chart_type']='COLUMN_CLUSTERED'
+                slide['chart_type']=chart_type_default
             elif isinstance(slide['data'],pd.core.series.Series):
                 slide['data']=pd.DataFrame(slide['data'])
                 slide['slide_type']='chart'
-                slide['chart_type']='COLUMN_CLUSTERED'
+                slide['chart_type']=chart_type_default
             elif isinstance(slide['data'],str) and os.path.exists(slide['data']):
                 slide['slide_type']='picture'
                 slide['chart_type']=None
@@ -559,13 +696,15 @@ def slides_data_gen(slides_data):
                 slide['layouts']='auto'
             if 'data_config' not in slide:
                 slide['data_config']=None
+            slide['chart_type']=None if 'chart_type' not in slide else slide['chart_type']
             if 'slide_type' not in slide:
                 if isinstance(slide['data'],pd.core.frame.DataFrame):
                     slide['slide_type']='chart'
-                    slide['chart_type']='COLUMN_CLUSTERED'
+                    slide['chart_type']=chart_type_default
                 elif isinstance(slide['data'],str) and os.path.exists(slide['data']):
+                    print('test')
                     slide['slide_type']='picture'
-                    slide['chart_type']=None
+                    slide['chart_type']=''
                 elif isinstance(slide['data'],str) and not(os.path.exists(slide['data'])):
                     slide['slide_type']='textbox'
                     slide['chart_type']=''
@@ -574,135 +713,92 @@ def slides_data_gen(slides_data):
                     slide['slide_type']=None
                     slide['chart_type']=None
                     continue
-        slides_data[i]=slide
-        
-        return slides_data
+        slides_data_new.append(slide)
+
+    return slides_data_new
 
 
 
-
-
-  
-def to_pptx(slides_data,filename=None,template=None,chart_type='COLUMN_CLUSTERED'):
+class Report():
     '''
-    每一页PPT设定为四个元素：标题、结论、主题、脚注
-    输入：
-    slides_data: 每一页ppt所需要的元素[
-        {title:,#标题
-        summary:,#结论
-        data:,# DataFrame数据或者文本数据
-        slide_type:,#chart、table、text
-        data_config:,#存储绘制所需要的相关信息
-        footnote:,#脚注
-        layouts:#该slide使用的ppt版式
-        },]
-    filename: 缺省以时间命名
-    template:使用的模板    
+    报告自动生成工具
+    r=Report(filename='')
+    r.add_cover(title='reportgen')
+    r.add_slides([])
+    r.save()
     '''
-    # =============[参数处理]===================
-    #  模板
-    if template is None:
-        if os.path.exists('template.pptx'):
-            prs=Presentation('template.pptx')
-        else:
-            prs=Presentation()
-    else :
-        prs=Presentation(template)
-    # 文件名和pptx API设定
-    if (filename is not None) and not(isinstance(filename,str)):
-        prs=filename
-        filename=time.strftime('%Y%m%d%H%M.pptx', time.localtime())
-    elif filename is None:
-        filename=time.strftime('%Y%m%d%H%M.pptx', time.localtime())
-    # 版式
-    title_only_slide=pptx_layouts(prs)
-    if title_only_slide:
-        layouts=title_only_slide[0]
-    else:
-        layouts=[0,0]
-    # 其他
-    title=''
-    summary=''
-    footnote=''
-    
-    # 处理slides_data数据
-    if (not isinstance(slides_data,list)) and (not isinstance(slides_data,tuple)):
-        slides_data=[slides_data]
+    def __init__(self,filename=None,chart_type_default='COLUMN_CLUSTERED'):
 
-    # 补全相关信息
-    for i in range(len(slides_data)):
-        slide=slides_data[i]
-        # 补全相关信息,数据处理部分待定
-        if not isinstance(slide,dict):
-            slide={'data':slide}
-            slide['title']=title
-            slide['summary']=summary
-            slide['footnote']=footnote
-            slide['layouts']=layouts
-            if isinstance(slide['data'],pd.core.frame.DataFrame):
-                slide['slide_type']='chart'
-                slide['data_config']='COLUMN_CLUSTERED'
-            elif isinstance(slide['data'],pd.core.series.Series):
-                slide['data']=pd.DataFrame(slide['data'])
-                slide['slide_type']='chart'
-                slide['data_config']='COLUMN_CLUSTERED'
-            elif isinstance(slide['data'],str):
-                slide['slide_type']='text'
-                slide['data_config']=''
+        #self.template=template
+        self.filename=filename
+        self.chart_type_default=chart_type_default
+        if filename is None:
+            if os.path.exists('template.pptx'):
+                prs=Presentation('template.pptx')
             else:
-                print('未知的数据格式，请检查数据')
-                break
-        elif isinstance(slide,dict):
-            if 'data' not in slide:
-                print('没有找到需要的数据，请检查')
-                slide['slide_type']=None
-                slide['data_config']=None
+                prs=Presentation()
+        else :
+            prs=Presentation(filename)
+        self.prs=prs
+        title_only_slide=pptx_layouts(prs)
+        if title_only_slide:
+            layouts=title_only_slide[0]
+        else:
+            layouts=[0,0]
+        self.layouts_default=layouts
+
+    def add_slides(self,slides_data,chart_type_default=None):
+        '''
+        slides_data: 每一页ppt所需要的元素[
+            {title:,#标题
+            summary:,#结论
+            data:,# DataFrame数据、文本数据、图片地址等
+            slide_type:,#chart、table、text
+            chart_type:图表类型
+            data_config:,#字典格式，绘制data其他所需要的相关参数，保留字段，暂时不用
+            footnote:,#脚注
+            layouts:#该slide使用的ppt版式
+            },]
+        '''
+        if chart_type_default is None:
+            chart_type_default=self.chart_type_default
+        slides_data=slides_data_gen(slides_data,chart_type_default)
+        for slide in slides_data:
+            slide_type=slide['slide_type']
+            title=slide['title']
+            summary=slide['summary']
+            footnote=slide['footnote']
+            layouts=self.layouts_default if slide['layouts'] == 'auto' else slide['layouts']
+            data=slide['data']
+            chart_type=slide['chart_type'] if 'chart_type' in slide else None
+            data_config=slide['data_config']#暂时没有用该参数
+            if (slide_type is None) or (not isinstance(slide_type,str)):
                 continue
-            if isinstance(slide['data'],pd.core.series.Series):
-                slide['data']=pd.DataFrame(slide['data'])
-            if 'title' not in slide:
-                slide['title']=title
-            if 'summary' not in slide:
-                slide['summary']=summary
-            if 'footnote' not in slide:
-                slide['footnote']=footnote
-            if 'layouts' not in slide:
-                slide['layouts']=layouts
-            if 'slide_type' not in slide:
-                if isinstance(slide['data'],pd.core.frame.DataFrame):
-                    slide['slide_type']='chart'
-                    slide['data_config']='COLUMN_CLUSTERED'                
-                elif isinstance(slide['data'],str):
-                    slide['slide_type']='text'
-                    slide['data_config']=''
-                else:
-                    print('未知的数据格式，请检查数据')
-                    slide['slide_type']=None
-                    slide['data_config']=None
-                    slides_data[i]=slide
-                    continue
-        slides_data[i]=slide
-    for slide in slides_data:
-        slide_type=slide['slide_type']
-        title=slide['title']
-        summary=slide['summary']
-        footnote=slide['footnote']
-        layouts=slide['layouts']
-        data=slide['data']
-        data_config=slide['data_config']
-        if (slide_type is None) or (not isinstance(slide_type,str)):
-            continue
-        slide_type=slide_type.lower()
-        '''
-        一些相关的细节待补充
-        '''
-        if slide_type == 'chart':
-            plot_chart(prs,data,chart_type=data_config,title=title,summary=summary,layouts=layouts);
-        elif slide_type == 'table':
-            plot_table(prs,data,layouts=layouts,title=title,summary=summary);
-        elif slide_type in ['text','txt']:
-            plot_textbox(prs,data,layouts=layouts,title=title,summary=summary);
-    prs.save(filename)
+            if slide_type == 'chart':
+                self.prs=plot_chart(self.prs,data,chart_type=chart_type,layouts=layouts,\
+                title=title,summary=summary,footnote=footnote);
+            elif slide_type == 'table':
+                self.prs=plot_table(self.prs,data,layouts=layouts,title=title,summary=summary,\
+                footnote=footnote);
+            elif slide_type in ['textbox','text']:
+                self.prs=plot_textbox(self.prs,data,layouts=layouts,title=title,summary=summary,\
+                footnote=footnote);
+            elif slide_type in ['picture','figure']:
+                self.prs=plot_picture(self.prs,data,layouts=layouts,title=title,summary=summary,\
+                footnote=footnote);
+        return self
+
+    def save(self,filename=None):
+        filename=self.filename+time.strftime('_%Y%m%d%H%M.pptx', time.localtime()) if filename is None else filename
+        self.prs.save(filename)
+
+    def add_cover(self,title='',author='',style='default',layouts='auto',size=[8,6]):
+        title =u'reportgen自动生成工具' if len(title)==0 else title
+        #author =u'report' if len(author)==0 else author
+        layouts=self.layouts_default if layouts == 'auto' else layouts
+        if style == 'default':
+            self.prs=plot_cover(self.prs,title=title,layouts=layouts,xspace=size[0],yspace=size[1]);
+        return self
 
 
 
