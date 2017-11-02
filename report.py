@@ -37,55 +37,6 @@ from pptx.dml.color import RGBColor
 
 
 
-def pptx_layouts(prs):
-    '''给定模板，自动识别标题版式
-    prs可以是pptx对象，也可以是新的模板路径
-    '''
-    if isinstance(prs,str) and os.path.exists(prs):
-        prs=Presentation(prs)
-    slide_width=prs.slide_width
-    slide_height=prs.slide_height
-    title_only_slide=[]
-    #blank_slide=[]
-    for i in range(len(prs.slide_masters)):
-        slides=prs.slide_masters[i]
-        #print('第{}个有{}个版式'.format(i,len(slides.slide_layouts)))
-        for j in range(len(slides.slide_layouts)):
-            slide=slides.slide_layouts[j]
-            title_slide=0
-            placeholder_size=0
-            for k in range(len(slide.shapes)):
-                shape=slide.shapes[k]
-                if shape.is_placeholder and shape.has_text_frame:
-                    left,top=shape.left/slide_width,shape.top/slide_height
-                    height=shape.height/slide_height
-                    if left<1 and top<1 and height<1 and left>0 and top>0 and height>0:
-                        placeholder_size+=1
-                    #print('left={:.2f},top={:.2f},height={:.2f}'.format(left,top,height))
-                    if left<0.15 and top<0.15 and height <0.25:
-                        title_slide+=1
-            #print('{}个文本占位符,{}个title'.format(placeholder_size,title_slide))
-            if placeholder_size==1 and title_slide==1:
-                title_only_slide.append([i,j])
-            #if placeholder_size==0:
-                #blank_slide.append((i,j))s
-    return title_only_slide
-
-
-def get_texts(filename):
-    prs = Presentation(filename)
-    # text_runs will be populated with a list of strings,
-    # one for each text run in presentation
-    text_runs = []
-
-    for slide in prs.slides:
-        for shape in slide.shapes:
-            if not shape.has_text_frame:
-                continue
-            for paragraph in shape.text_frame.paragraphs:
-                for run in paragraph.runs:
-                    text_runs.append(run.text)
-    return text_runs
 
 def df_to_table(slide,df,left,top,width,height,index_names=False,columns_names=True):
     '''将pandas数据框添加到slide上，并生成pptx上的表格
@@ -530,7 +481,7 @@ def plot_cover(prs,title=u'reportgen工具包封面',layouts=[0,0],xspace=8,yspa
     try:
         from delaunay import Delaunay2D
     except:
-        return
+        return 
     slide_width=prs.slide_width
     slide_height=prs.slide_height
     # 可能需要修改以适应更多的情形
@@ -719,6 +670,8 @@ def slides_data_gen(slides_data,chart_type_default='COLUMN_CLUSTERED'):
 
 
 
+
+
 class Report():
     '''
     报告自动生成工具
@@ -740,12 +693,61 @@ class Report():
         else :
             prs=Presentation(filename)
         self.prs=prs
-        title_only_slide=pptx_layouts(prs)
+        title_only_slide=self._layouts()
         if title_only_slide:
             layouts=title_only_slide[0]
         else:
             layouts=[0,0]
         self.layouts_default=layouts
+
+
+    def _layouts(self):
+        '''给定pptx文件，自动识别标题等版式
+        '''
+        slide_width=self.prs.slide_width
+        slide_height=self.prs.slide_height
+        title_only_slide=[]
+        #blank_slide=[]
+        for i in range(len(self.prs.slide_masters)):
+            slides=self.prs.slide_masters[i]
+            #print('第{}个有{}个版式'.format(i,len(slides.slide_layouts)))
+            for j in range(len(slides.slide_layouts)):
+                slide=slides.slide_layouts[j]
+                title_slide=0
+                placeholder_size=0
+                for k in range(len(slide.shapes)):
+                    shape=slide.shapes[k]
+                    if shape.is_placeholder and shape.has_text_frame:
+                        left,top=shape.left/slide_width,shape.top/slide_height
+                        height=shape.height/slide_height
+                        if left<1 and top<1 and height<1 and left>0 and top>0 and height>0:
+                            placeholder_size+=1
+                        #print('left={:.2f},top={:.2f},height={:.2f}'.format(left,top,height))
+                        if left<0.15 and top<0.15 and height <0.25:
+                            title_slide+=1
+                #print('{}个文本占位符,{}个title'.format(placeholder_size,title_slide))
+                if placeholder_size==1 and title_slide==1:
+                    title_only_slide.append([i,j])
+                #if placeholder_size==0:
+                    #blank_slide.append((i,j))s
+        return title_only_slide
+
+
+
+    def get_texts(self):
+        # one for each text run in presentation
+        text_runs = []
+    
+        for slide in self.prs.slides:
+            for shape in slide.shapes:
+                if not shape.has_text_frame:
+                    continue
+                for paragraph in shape.text_frame.paragraphs:
+                    for run in paragraph.runs:
+                        text_runs.append(run.text)
+        return text_runs
+
+
 
     def add_slides(self,slides_data,chart_type_default=None):
         '''
@@ -771,7 +773,7 @@ class Report():
             layouts=self.layouts_default if slide['layouts'] == 'auto' else slide['layouts']
             data=slide['data']
             chart_type=slide['chart_type'] if 'chart_type' in slide else None
-            data_config=slide['data_config']#暂时没有用该参数
+            #data_config=slide['data_config']#暂时没有用该参数
             if (slide_type is None) or (not isinstance(slide_type,str)):
                 continue
             if slide_type == 'chart':
@@ -788,9 +790,6 @@ class Report():
                 footnote=footnote);
         return self
 
-    def save(self,filename=None):
-        filename=self.filename+time.strftime('_%Y%m%d%H%M.pptx', time.localtime()) if filename is None else filename
-        self.prs.save(filename)
 
     def add_cover(self,title='',author='',style='default',layouts='auto',size=[8,6]):
         title =u'reportgen自动生成工具' if len(title)==0 else title
@@ -800,9 +799,158 @@ class Report():
             self.prs=plot_cover(self.prs,title=title,layouts=layouts,xspace=size[0],yspace=size[1]);
         return self
 
+    def add_textbox(self):
+        return self
+    def add_picture(self):
+        return self
+    def add_chart(self):
+        return self
+    def add_table(self):
+        return self
+    def add_slide(self,data=[],title='',summary='',footnote='',layouts='auto',**kwarg):
+        '''通用格式
+        data=[{'data':,'slide_type':,'type':,},]
+        '''
+        slide_width=self.prs.slide_width
+        slide_height=self.prs.slide_height
+        
+        # 标准化data格式
+        if not(isinstance(data,list)):
+            data=[data]
+        for i,d in enumerate(data):
+            if not(isinstance(d,dict)):               
+                if isinstance(d,(pd.core.frame.DataFrame,pd.core.frame.Series)):
+                    slide_type='chart'
+                    chart_type=self.chart_type_default
+                elif isinstance(d,str) and os.path.exists(d):
+                    slide_type='picture'
+                    chart_type=''
+                elif isinstance(d,str) and not(os.path.exists(d)):
+                    slide_type='textbox'
+                    chart_type=''
+                else:
+                    print('未知的数据格式，请检查数据')
+                    slide_type=''
+                    chart_type=''
+                data[i]={'data':d,'slide_type':slide_type,'type':chart_type}
+
+        # 各个模板的位置
+        locations=self.location_suggest(len(data))
+        summary_loc=locations['summary']
+        footnote_loc=locations['footnote']
+        data_loc=locations['data']
+        
+        # 选取的板式
+        if layouts == 'auto':
+            layouts=self.layouts_default
+        title_only_slide = self.prs.slide_masters[layouts[0]].slide_layouts[layouts[1]]
+        slide = self.prs.slides.add_slide(title_only_slide)
+        
+        #输出标题
+        if 'title' in slide.shapes.__dict__:
+            slide.shapes.title.text = title
+        else:
+            print(u'选取的ppt板式没有标题，请检查')
+            return self
+      
+        # 输出副标题 summary
+        if summary:
+            txBox = slide.shapes.add_textbox(summary_loc['l'], summary_loc['t'], summary_loc['w'], summary_loc['h'])
+            txBox.text_frame.text=summary
+    
+        # 输出脚注 footnote
+        if footnote:
+            txBox = slide.shapes.add_textbox(footnote_loc['l'], footnote_loc['t'], footnote_loc['w'], footnote_loc['h'])
+            #p = text_frame.paragraphs[0]
+            p=txBox.text_frame.paragraphs[0]
+            p.text=footnote
+            p.font.size = Pt(10)
+            p.font.language_id = 3076
+            p.font.name='Microsoft YaHei UI'
+            p.font.color.rgb=RGBColor(127,127,127)
+            try:
+                txBox.text_frame.fit_text(max_size=10)
+            except:
+                pass
+                #print('cannot fit the size of font')
+                
+        for dd in data:
+            slide_type=dd['slide_type']
+            if slide_type in ['table']:
+                # 绘制表格
+                '''添加自适应的表格大小
+                默认最大12*6，width=0.80,height=0.70
+                left=0.1,top=0.25
+                '''
+                R,C=dd['data'].shape
+                width=max(0.5,min(1,C/6.0))*0.80
+                height=max(0.5,min(1,R/12.0))*0.70
+                left=0.5-width/2
+                top=0.25
+                left,top=Emu(left*slide_width),Emu(top*slide_height)
+                width,height=Emu(width*slide_width),Emu(height*slide_height)
+                df_to_table(slide,dd['data'],left,top,width,height,index_names=True)
+            elif slide_type in ['textbox']:
+            
+        return prs
 
 
 
+
+
+
+        
+        return self
+        
+    def location_suggest(self,num=1,rate=0.78):
+        '''统一管理slides各个模块的位置
+        parameter
+        --------
+        num: 主体内容（如图、外链图片、文本框等）的个数，默认从左到右依次排列
+        rate: 主体内容的宽度综合
+        
+        return
+        -----
+        locations: dict格式. l代表left,t代表top,w代表width，h代表height
+        '''
+        slide_width,slide_height=prs.slide_width,prs.slide_height
+        if 'summary_loc' in config.__dict__:
+            summary_loc=config.summary_loc
+        else:
+            summary_loc=[0.10,0.14,0.80,0.15]
+            
+        if 'footnote_loc' in config.__dict__:
+            footnote_loc=config.footnote_loc
+        else:
+            footnote_loc=[0.025,0.95,0.70,0.06]           
+
+        if 'data_loc' in config.__dict__:
+            data_loc=config.data_loc
+        else:
+            data_loc=[0.11,0.30,0.78,0.60]
+            
+        locations={}
+        locations['summary']={'l':Emu(summary_loc[0]*slide_width),'t':Emu(summary_loc[1]*slide_height),\
+                 'w':Emu(summary_loc[2]*slide_width),'h':Emu(summary_loc[3]*slide_height)}
+        
+        locations['footnote']={'l':Emu(footnote_loc[0]*slide_width),'t':Emu(footnote_loc[1]*slide_height),\
+                 'w':Emu(footnote_loc[2]*slide_width),'h':Emu(footnote_loc[3]*slide_height)}
+        # 主体部分只有一个的情形
+        '''
+        控制主体的宽度为78%，且居中显示。
+        '''
+        if num>1:
+            left=[(1-rate)*(i+1)/(float(num)+1)+rate*i/float(num) for i in range(num)]
+            top=[data_loc[1]]*num
+            width=[rate/float(num)]*num
+            height=[data_loc[3]]*num 
+            locations['data']=[{'l':Emu(left[i]*slide_width),'t':Emu(top[i]*slide_height),\
+                     'w':Emu(width[i]*slide_width),'h':Emu(height[i]*slide_height)} for i in range(num)]
+        else:
+            locations['data']=[{'l':Emu(data_loc[0]*slide_width),'t':Emu(data_loc[1]*slide_height),\
+                     'w':Emu(data_loc[2]*slide_width),'h':Emu(data_loc[3]*slide_height)}]
+
+        return locations
 
 
 if __name__ == '__main__':
