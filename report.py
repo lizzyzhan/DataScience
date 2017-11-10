@@ -14,16 +14,12 @@ pptx.Presentation().slide_width
 '''
 
 import os
-import re
-import sys
-import math
 import time
-
 
 
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import config
 
 
@@ -860,8 +856,8 @@ class Report():
         number_format_tick: 横纵坐标的数据标签
         
         '''
-        slide_width=self.prs.slide_width
-        slide_height=self.prs.slide_height
+        #slide_width=self.prs.slide_width
+        #slide_height=self.prs.slide_height
         
         # 标准化data格式
         if not(isinstance(data,list)):
