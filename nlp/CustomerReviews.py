@@ -10,7 +10,7 @@ import re
 import os
 
 
-from gensim import corpora,models,similarities
+from gensim import corpora,models#,similarities
 from gensim.models.ldamodel import LdaModel
 import jieba
 import jieba.analyse as analyse
@@ -21,14 +21,14 @@ from snownlp import SnowNLP
 
 
 
-import numpy as np
+#import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
-from sklearn.decomposition import TruncatedSVD, NMF, LatentDirichletAllocation
-from sklearn.cluster import KMeans
+#from sklearn.decomposition import TruncatedSVD, NMF, LatentDirichletAllocation
+#from sklearn.cluster import KMeans
 from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection.univariate_selection import chi2, f_classif
+from sklearn.feature_selection.univariate_selection import f_classif #,chi2 
 
 
 #import logging
@@ -103,12 +103,13 @@ def jieba_cut(texts,userdict=None,stopwords=None,POS=False,add_words=[]):
         jieba.add_word(word,tag='n')
 
 
-    # 新方法，为了能有识别新词能力，我们把语料合并分词(后期可以按照一万个评论一批)
+    # 新方法，为了能有识别新词能力，我们把语料合并分词
     jieba.add_word('燚燚燚')
     # 去掉分词结果中一份评论全是字母或数字的情况
     pattern=re.compile(r'\s[a-z\.]+\s|^[a-z\.]+\s|\s[a-z\.]+$|\s[\d\.]+\s|^[\d\.]+\s|\s[\d\.]+$')
     if POS:
-        tmp=jieba.posseg.lcut(texts)
+        from jieba import posseg
+        tmp=posseg.lcut(texts)
         texts=' '.join([w.word for w in tmp if w.word not in stopwords]).split('燚燚燚')
         texts=list(map(lambda x:re.sub(r'\s+',' ',re.sub(pattern,' ',x).strip()),texts))
         texts=pd.Series(texts,index=index)
@@ -255,7 +256,7 @@ class Reviews():
         暂时只适合中文
         '''
         def _keywords_find(s):
-            kf=re.compile('[\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039]+'+keywords+'[\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039]+')
+            kf=re.compile('[\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039]{0,}'+keywords+'[\u4e00-\u9fa5\u0061-\u007a\u0030-\u0039]{0,}')
             tmp=re.findall(kf,s)
             if tmp:
                 sentenses=' | '.join(tmp)
@@ -404,7 +405,7 @@ class Reviews():
         else:
             texts=' '.join(self.texts_raw)
          
-        keywords=jieba.analyse.textrank(texts,topK=topK)
+        keywords=analyse.textrank(texts,topK=topK)
         return keywords
 
 
@@ -414,7 +415,7 @@ class Reviews():
         用于检测两个词是否常常放在一起用，例如手机、便宜会出现在一起，但拍照、便宜就不会出现在一起
         parametre
         --------
-        s:['手机','不错']
+        pair_words:['手机','不错']
         texts: 语料
         '''
         if self.texts_raw is not None:
@@ -436,7 +437,6 @@ class Reviews():
         if method in ['snownlp']:
             s=texts.map(lambda x:SnowNLP(x).sentiments)
         return s
-
 
 
 
@@ -605,94 +605,6 @@ class Reviews():
         keywords=[(w[0][0],w[0][1],w[1],w[2][0],w[2][1]) for w in wordcloud.layout_]
         comments_keys=pd.DataFrame(keywords,columns=['key','count','font_size', 'position_x','position_y'])
         return comments_keys
-
-
-if __name__=='__main__':
-    
-    # ======================================================================
-    initial_words=['女娲造人','混沌初开','天崩地裂','永不变心','寝食难安','七彩祥云',\
-    '七经八脉', '焚香祷告','凑齐银两','呜呼哀哉','海枯石烂','阅商无数','顶天立地','欣喜若狂',\
-    '乃是','天上','三斧','小生', '七彩', '祥云','吾','宝物','金光四射','金甲','天神']
-    
-    data=pd.read_excel('./data/红米4A.xlsx')
-    color=list(data['productColor'].dropna().unique())
-    tt=Reviews(data['content'],data['score'])
-    tt.replace('synonyms.txt')
-    tt.segment(product_dict='mobile_dict.txt',stopwords='.\\stopwords\\chinese.txt',add_words=color)
-    tt.drop_invalid(initial_words=initial_words,max_rate=0.6)
-    features=tt.get_product_features()
-    print(features)
-    features1=list(set(features)-set(['京东','物流']) | set(['拍照']))
-    features_opinion,features_corpus=tt.features_sentiments(features=features,thr=0.5)
-    
-    # 好中差评论分析
-    cc={'好评':tt.scores.isin([5]),'中评':tt.scores.isin([3,4]),'差评':tt.scores.isin([1,2])}
-    for c in cc:
-        #topics_keywords=tt.find_topic(tt.scores.isin([5]))
-        keywords1=tt.get_keywords(cc[c])
-        print(c+'关键词：')
-        print('|'.join(keywords1))
-        tt.genwordcloud(cc[c],filename=c+'词云.png')
-    
-
-
-
-
-'''
-# ==================[自动摘要算法]======================
-from textrank4zh import TextRank4Keyword, TextRank4Sentence
-tr4w = TextRank4Keyword()
-tr4w.analyze(text=' '.join(tt.texts_raw), lower=True, window=2)  # py2中text必须是utf8编码的str或者unicode对象，py3中必须是utf8编码的bytes或者str对象
-print( '关键词：' )
-for item in tr4w.get_keywords(20, word_min_len=1):
-    print(item.word, item.weight)
-print()
-print( '关键短语：' )
-for phrase in tr4w.get_keyphrases(keywords_num=20, min_occur_num= 2):
-    print(phrase)
-tr4s = TextRank4Sentence()
-tr4s.analyze(text=' '.join(tt.texts_raw), lower=True, source = 'all_filters')
-print()
-print( '摘要：' )
-for item in tr4s.get_key_sentences(num=3):
-    print(item.index, item.weight, item.sentence)  # index是语句在文本中位置，weight是权重
-'''
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
