@@ -20,14 +20,52 @@ sns.set()
 #import pywt
 
 
-holidays=pd.read_excel('.\\data\\holidays.xlsx')
-holidays=holidays.loc[holidays['holiday'].notnull(),['ds','holiday']].reset_index(drop=True)
+hld=pd.read_excel('.\\data\\holidays.xlsx')
+hld['xhld']=None
+for i in hld.index:
+    cond1=hld.loc[i,'daysbeforeholiday']<0 and hld.loc[i,'daysbeforeholiday']+hld.loc[i,'daysafterholiday']>=0
+    cond2=hld.loc[i,'daysbeforeholiday']<0 and hld.loc[i,'daysbeforeholiday']+hld.loc[i,'daysafterholiday']<0
+    cond3=hld.loc[i,'daysbeforeholiday']>=0 and hld.loc[i,'daysbeforeholiday']+hld.loc[i,'daysafterholiday']<0
+    cond4=hld.loc[i,'daysbeforeholiday']>=0 and hld.loc[i,'daysbeforeholiday']+hld.loc[i,'daysafterholiday']>0
+    cond5=hld.loc[i,'daysbeforeholiday']>=0 and hld.loc[i,'daysbeforeholiday']+hld.loc[i,'daysafterholiday']==0
+    if cond1:
+        hld.loc[i,'xhld']='BH'+str(np.abs(hld.loc[i,'daysbeforeholiday'])).zfill(2)
+    elif cond2:
+        hld.loc[i,'xhld']='AH'+str(np.abs(hld.loc[i,'daysafterholiday'])).zfill(2)
+    elif cond3:
+        hld.loc[i,'xhld']='HA'+str(np.abs(hld.loc[i,'daysbeforeholiday'])+1).zfill(2)
+    elif cond4:
+        hld.loc[i,'xhld']='HB'+str(np.abs(hld.loc[i,'daysafterholiday'])+1).zfill(2)
+    elif cond5:
+        hld.loc[i,'xhld']='HAB'
+    else:
+        hld.loc[i,'xhld']=''
+
+
+
+
+
+holidays=hld.loc[hld['holiday'].notnull(),['ds','holiday']].reset_index(drop=True)
 
 
 
 df = pd.read_excel('./data/tehr.xlsx')
 df['ds'] = pd.to_datetime(df['ds'])
-df['y'] = np.log(df['y'])
+
+df=df.merge(hld,how='left',on='ds')
+
+hh=df.groupby('xhld')['y'].mean()
+
+
+ind=['BH'+str(i).zfill(2) for i in range(14,0,-1)] +['HA01','HA02','HA03','HA04','HAB','HB04','HB03','HB02','HB01']\
++['AH'+str(i).zfill(2) for i in range(1,15)]
+
+hh=hh.loc[ind]
+sns.barplot(hh.index,hh)
+
+
+
+#df['y'] = np.log(df['y'])
 
 
 ## 默认参数
@@ -53,6 +91,7 @@ param_grid={'growth':['linear']
 }
 
 
+'''
 param_list=list(ParameterGrid(param_grid))
 #scores=pd.DataFrame(columns=['seasonality','holidays','mape','rmse'])
 
@@ -84,8 +123,11 @@ print('对应的参数是：{}={}, {}={}'.format(
 # 绘图，查看调参后的模型在历史数据上的结果
 param={'growth':'linear','seasonality_prior_scale':scores.loc[scores['mape'].argmin(),'seasonality'],\
 'holidays_prior_scale':scores.loc[scores['mape'].argmin(),'holidays']}
+'''
+
 param={'growth':'linear','seasonality_prior_scale':50,'holidays_prior_scale':20}
-m=Prophet(holidays=holidays,**param)
+#m=Prophet(holidays=holidays,**param)
+m=Prophet(**param)
 m.fit(df)
 forecasts=m.predict(df[['ds']])
 forecasts['y']=df['y']
@@ -107,6 +149,9 @@ axs[2].set_ylabel('seasonal')
 axs[3].plot(forecasts['ds'],forecasts['y']-forecasts['yhat'])
 axs[3].set_ylabel('residual')
 fig.savefig('.\\_images\\prophet_decompose.png',dpi=500)
+
+
+residual=forecasts['y']-forecasts['yhat']
 
 
 
