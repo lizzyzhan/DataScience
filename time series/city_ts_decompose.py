@@ -39,10 +39,10 @@ hld=pd.read_excel('.\\data\\holidays.xlsx')
 
 # 间夜量数据导入
 # data 的列： ds,y,cityid,cityname
-df = pd.read_excel('./data/tehr.xlsx')
-df['cityid']=0
-df['cityname']='全国'
+df = pd.read_excel('./data/tehr_city.xlsx')
 df['ds'] = pd.to_datetime(df['ds'])
+df=df.loc[df['ds']<='2018-06-25',:]
+df.loc[df['y']==0,'y']=None
 df['y']=np.log(df['y'])
 df=df.merge(hld[['ds','holiday','bahld']],how='left',on='ds')
 
@@ -203,7 +203,7 @@ columns=['cityname','mape','rmse','seasonality_prior_scale','holidays_prior_scal
 columns+=['seasonal','yearly','weekly','holidays','residual']
 scores=pd.DataFrame(index=df['cityid'].unique(),columns=columns)
 city_decompose=[]                       
-for city in df['cityid']:
+for city in dim_city.keys():
     print('================ begin run : {} ======================'.format(city,dim_city[city]))
     df_city=df.loc[df['cityid']==city,['ds','y']]
     cv_param={'horizon':30,'period':120,'initial':1095}
@@ -232,7 +232,7 @@ for city in df['cityid']:
 
 city_decompose=pd.DataFrame(city_decompose)
 
-
+scores.to_excel('scores.xlsx',index=True)
 
 
                      
