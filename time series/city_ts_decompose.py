@@ -46,7 +46,8 @@ df.loc[df['y']==0,'y']=None
 df['y']=np.log(df['y'])
 df=df.merge(hld[['ds','holiday','bahld']],how='left',on='ds')
 
-dim_city=dict(zip(df['cityid'],df['cityname']))
+dim_city=df.groupby(['cityid','cityname'])['y'].sum().rank(ascending=False).reset_index().rename(columns={'y':'rank'}).sort_values('rank')
+
 
 
 
@@ -89,8 +90,7 @@ def ts_grid_search(df,holidays,param_grid=None,cv_param=None,RandomizedSearch=Tr
     时间序列需要特殊的交叉验证
     
     df:   
-    holidays: 需要实现调好
-    
+    holidays: 需要实现调好  
     
     '''
 
@@ -144,7 +144,7 @@ def ts_decompose(forecasts):
     
     '''
     
-    assert set(['ds','y','residual','holiday']).issubset(set(forecasts.columns)) 
+    assert set(['ds','y','residual','holiday','bahld']).issubset(set(forecasts.columns)) 
 
                        
     tsdecompose={}
@@ -193,23 +193,38 @@ def ts_decompose(forecasts):
                               ,'holiday_max':list(holiday_ratio.sort_values().index[-1:])\
                               ,'holiday_min':list(holiday_ratio.sort_values().index[:1])}
 
+    # 计算异常日期 anomaly_date
+    w=forecasts[['ds','residual','bahld']]
+    w1=w.loc[np.abs(w['residual']-w['residual'].mean())>=3*w['residual'].std(),:]
+    if len(w1)>0:
+        anomaly_date=list(w1.loc[((w1['bahld']>'BH14')&(w1['bahld']<'BH99'))|((w1['bahld']>'AH14')&(w1['bahld']<'AH99')),:]['ds'])
+    else:
+        anomaly_date=[]
+    tscomponents['anomaly_date']=anomaly_date
+
+
     return tsdecompose,tscomponents
                        
  
-
+Forecasts=pd.DataFrame()
 
 params_best={}
 columns=['cityname','mape','rmse','seasonality_prior_scale','holidays_prior_scale','changepoint_prior_scale','interval_width']
 columns+=['seasonal','yearly','weekly','holidays','residual']
 scores=pd.DataFrame(index=df['cityid'].unique(),columns=columns)
 city_decompose=[]                       
-for city in dim_city.keys():
-    print('================ begin run : {} ======================'.format(city,dim_city[city]))
+for ind in dim_city.index:
+    city=dim_city.loc[ind,'cityid']
+    cityname=dim_city.loc[ind,'cityname']
+    if 'cityid' in Forecasts and city in Forecasts['cityid']:
+        continue
+    print('================ begin run : {} {}======================'.format(city,cityname))
     df_city=df.loc[df['cityid']==city,['ds','y']]
     cv_param={'horizon':30,'period':120,'initial':1095}
     param,best_scores,scores_tmp=ts_grid_search(df_city,holidays,cv_param=cv_param)
+    print('best scores mape :{:.2f}%'.format(best_scores*100))
     params_best[city]=param
-    scores.loc[city,['cityname','mape','rmse']]=[dim_city[city],scores_tmp['mape'].min(),scores_tmp['rmse'].min()]
+    scores.loc[city,['cityname','mape','rmse']]=[cityname,scores_tmp['mape'].min(),scores_tmp['rmse'].min()]
     
     scores.loc[city,['seasonality_prior_scale','holidays_prior_scale','changepoint_prior_scale','interval_width']]\
     =[param['seasonality_prior_scale'],param['holidays_prior_scale'],param['changepoint_prior_scale'],param['interval_width']]
@@ -217,23 +232,31 @@ for city in dim_city.keys():
     m=Prophet(holidays=holidays,**param)
     m.fit(df_city)
     forecasts=m.predict(df_city[['ds']])
-    forecasts['y']=df_city['y']
+    forecasts=forecasts.merge(df_city[['ds','y']],how='left',on='ds')
     forecasts=forecasts.assign(residual = lambda x:x.y-x.yhat)
-    forecasts=forecasts.merge(hld[['ds','holiday']],how='left',on='ds')
+    forecasts=forecasts.merge(hld[['ds','holiday','bahld']],how='left',on='ds') 
+    
     
     tsdecompose,tscomponents=ts_decompose(forecasts)
     scores.loc[city,['seasonal','yearly','weekly','holidays','residual']]\
     =[tsdecompose['seasonal'],tsdecompose['yearly'],tsdecompose['weekly'],tsdecompose['holidays'],tsdecompose['residual']]
-    tscomponents_tmp={'cityid':city,'cityname':dim_city[city]}
+    tscomponents_tmp={'cityid':city,'cityname':cityname}
     tscomponents_tmp.update(tscomponents['yearly'])
     tscomponents_tmp.update(tscomponents['weekly'])
     tscomponents_tmp.update(tscomponents['holidays'])
     city_decompose.append(tscomponents_tmp)
+    
+    tmp=forecasts[['ds','y','yhat','trend','seasonal','yearly','weekly','holidays','residual']]
+    tmp.insert(1,'cityid',city)
+    tmp.insert(2,'cityname',cityname)
+    Forecasts=pd.concat([Forecasts,tmp],axis=0)
+   
+
 
 city_decompose=pd.DataFrame(city_decompose)
 
 scores.to_excel('scores.xlsx',index=True)
-
+params_best=pd.DataFrame(params_best).T
 
                      
 
