@@ -216,9 +216,10 @@ city_decompose=[]
 for ind in dim_city.index:
     city=dim_city.loc[ind,'cityid']
     cityname=dim_city.loc[ind,'cityname']
-    if 'cityid' in Forecasts and city in Forecasts['cityid']:
-        continue
     print('================ begin run : {} {}======================'.format(city,cityname))
+    if 'cityid' in Forecasts and city in Forecasts['cityid'].unique():
+        continue
+
     df_city=df.loc[df['cityid']==city,['ds','y']]
     cv_param={'horizon':30,'period':120,'initial':1095}
     param,best_scores,scores_tmp=ts_grid_search(df_city,holidays,cv_param=cv_param)
